@@ -7,7 +7,7 @@ import { usePlatform } from '../platform/PlatformContext.js';
 import { getRecentProjects, removeRecentProject } from '../project/recentProjects.js';
 import { openProjectFromDirectory, createNewProject } from '../project/projectLoader.js';
 import type { RecentProject } from '../model/index.js';
-import { BookOpen, FilePlus, Folder, FolderOpen, Github, GitBranch, Link2, Monitor, Moon, PlayCircle, Sun, X } from '../ui/icons/index.js';
+import { BookOpen, FilePlus, Folder, FolderOpen, GitBranch, Link2, Monitor, Moon, PlayCircle, Sun, X } from '../ui/icons/index.js';
 import { Button } from '../ui/Button.js';
 import { useTheme, type Theme } from '../ui/useTheme.js';
 import { version } from '../../package.json';
@@ -194,7 +194,6 @@ export function SplashPage({ demoUrl, onLoadDemo }: { demoUrl?: string; onLoadDe
               <Button
                 variant="ghost"
                 size="sm"
-                icon={<Github size={14} />}
                 onClick={() => window.open('https://github.com/linkml/linkml', '_blank')}
               >
                 GitHub
