@@ -6,7 +6,6 @@ export {
   FilePlus,
   Folder,
   FolderOpen,
-  Github,
   GitBranch,
   Hexagon,
   Link2,
