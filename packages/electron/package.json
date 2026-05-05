@@ -31,7 +31,7 @@
     "electron": "^41.5.0",
     "electron-builder": "^26.8.1",
     "typescript": "^6.0.3",
-    "vitest": "^3.0.0"
+    "vitest": "^4.1.5"
   },
   "build": {
     "appId": "io.linkml.modeler",
