@@ -4,11 +4,12 @@
  * - Creates a BrowserWindow loading the web renderer
  * - Registers IPC handlers for PlatformAPI (file I/O + git operations)
  * - Uses isomorphic-git with Node fs for git operations
- * - Credential storage via keytar (falls back to in-memory cache)
+ * - Credential storage via Electron safeStorage (falls back to in-memory cache)
  */
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron';
+import { storeCredential, getCredential, deleteCredential } from './credentials.js';
 import { isAllowedExternalUrl, isPathWithinAllowedRoots } from './security.js';
 
 // Use app.isPackaged (reliable in both dev and packaged builds) rather than
@@ -115,8 +116,8 @@ async function createWindow(): Promise<void> {
   win.webContents.on('did-fail-load', (_e, code, desc, url) => {
     console.error('[did-fail-load]', { code, desc, url });
   });
-  win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
-    console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
+  win.webContents.on('console-message', ({ level, message, lineNumber, sourceId }) => {
+    console.log(`[renderer:${level}] ${message} (${sourceId}:${lineNumber})`);
   });
 
   // Apply URL allowlist in the window-open handler as well as the IPC handler,
@@ -405,18 +406,12 @@ function registerIpcHandlers(): void {
       let creds = credentialCache.get(remoteUrl);
 
       if (!creds) {
-        // Try keytar using the same service/key that storeCredential writes
-        try {
-          const keytar = await import('keytar').catch(() => null);
-          if (keytar) {
-            const username = await keytar.getPassword('linkml-modeler', 'git-username') ?? undefined;
-            const password = await keytar.getPassword('linkml-modeler', 'git-token') ?? undefined;
-            if (username && password) {
-              creds = { username, password };
-              credentialCache.set(remoteUrl, creds);
-            }
-          }
-        } catch { /* keytar unavailable */ }
+        const username = await getCredential('git-username') ?? undefined;
+        const password = await getCredential('git-token') ?? undefined;
+        if (username && password) {
+          creds = { username, password };
+          credentialCache.set(remoteUrl, creds);
+        }
       }
 
       await g.push({
@@ -449,17 +444,12 @@ function registerIpcHandlers(): void {
       let creds = credentialCache.get(remoteUrl);
 
       if (!creds) {
-        try {
-          const keytar = await import('keytar').catch(() => null);
-          if (keytar) {
-            const username = await keytar.getPassword('linkml-modeler', 'git-username') ?? undefined;
-            const password = await keytar.getPassword('linkml-modeler', 'git-token') ?? undefined;
-            if (username && password) {
-              creds = { username, password };
-              credentialCache.set(remoteUrl, creds);
-            }
-          }
-        } catch { /* keytar unavailable */ }
+        const username = await getCredential('git-username') ?? undefined;
+        const password = await getCredential('git-token') ?? undefined;
+        if (username && password) {
+          creds = { username, password };
+          credentialCache.set(remoteUrl, creds);
+        }
       }
 
       await g.pull({
@@ -523,34 +513,18 @@ function registerIpcHandlers(): void {
     }
   });
 
-  // ── Credentials (keytar) ─────────────────────────────────────────────────────
+  // ── Credentials (safeStorage) ────────────────────────────────────────────────
 
   ipcMain.handle('credential:store', async (_event, key: string, value: string) => {
-    try {
-      const keytar = await import('keytar').catch(() => null);
-      if (keytar) {
-        await keytar.setPassword('linkml-modeler', key, value);
-      }
-    } catch { /* keytar unavailable */ }
+    await storeCredential(key, value);
   });
 
   ipcMain.handle('credential:get', async (_event, key: string) => {
-    try {
-      const keytar = await import('keytar').catch(() => null);
-      if (keytar) {
-        return await keytar.getPassword('linkml-modeler', key);
-      }
-    } catch { /* keytar unavailable */ }
-    return null;
+    return getCredential(key);
   });
 
   ipcMain.handle('credential:delete', async (_event, key: string) => {
-    try {
-      const keytar = await import('keytar').catch(() => null);
-      if (keytar) {
-        await keytar.deletePassword('linkml-modeler', key);
-      }
-    } catch { /* keytar unavailable */ }
+    await deleteCredential(key);
   });
 
   // ── Settings (userData JSON file) ────────────────────────────────────────────
