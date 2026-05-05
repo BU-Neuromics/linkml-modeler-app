@@ -8,7 +8,9 @@ import type { PlatformAPI } from '@linkml-editor/core';
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 vi.mock('@isomorphic-git/lightning-fs', () => ({
-  default: vi.fn(() => ({ promises: {} })),
+  default: vi.fn(function () {
+    return { promises: {} };
+  }),
 }));
 vi.mock('isomorphic-git', () => ({ default: {} }));
 vi.mock('isomorphic-git/http/web', () => ({ default: {} }));

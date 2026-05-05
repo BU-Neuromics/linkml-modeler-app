@@ -19,7 +19,9 @@ const mockPfs = vi.hoisted(() => ({
 }));
 
 vi.mock('@isomorphic-git/lightning-fs', () => ({
-  default: vi.fn(() => ({ promises: mockPfs })),
+  default: vi.fn(function () {
+    return { promises: mockPfs };
+  }),
 }));
 
 vi.mock('isomorphic-git', () => ({
