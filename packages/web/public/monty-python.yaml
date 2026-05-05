@@ -11,17 +11,49 @@ default_prefix: mp
 default_range: string
 imports:
   - linkml:types
-
+enums:
+  QuestDifficulty:
+    description: Expected peril level of a knightly quest
+    permissible_values:
+      trivial:
+        description: A mere flesh wound of a challenge
+      moderate:
+        description: Requires planning, bravery, and a good shrubbery
+      perilous:
+        description: Extremely dangerous; beware the rabbit
+      legendary:
+        description: Only the bravest knight who says Ni may attempt this
+  SwallowSpecies:
+    description: Species of swallow relevant to coconut-carrying capacity
+    permissible_values:
+      african:
+        description: African swallow — migratory, reportedly stronger
+      european:
+        description: European swallow — non-migratory; coconut capacity unknown
+      unknown:
+        description: Species undetermined; the question may itself be a trap
+  WitchVerdict:
+    description: Possible outcomes of the official duck-weighing trial
+    permissible_values:
+      witch:
+        description: She weighs the same as a duck and is therefore a witch
+      not_a_witch:
+        description: Weight differs from a duck; not a witch
+      inconclusive:
+        description: The scales gave no clear answer; further investigation required
+  Color:
+    permissible_values:
+      Blue: null
+      Yellow: null
 classes:
-
   Knight:
     description: A noble knight of the Round Table
     attributes:
       name:
-        identifier: true
-        required: true
         description: The knight's name
         range: string
+        required: true
+        identifier: true
       title:
         description: Formal title and honorific
         range: string
@@ -37,30 +69,35 @@ classes:
       round_table:
         description: The Round Table fellowship to which this knight belongs
         range: RoundTable
-
+      favorite_color:
+        range: Color
+        required: true
   RoundTable:
     description: King Arthur's legendary fellowship of knights
     attributes:
       name:
-        identifier: true
-        required: true
         description: Name of this fellowship
         range: string
+        required: true
+        identifier: true
       castle:
         description: Home castle of this fellowship
         range: string
       member_count:
         description: Number of knights currently seated at the table
         range: integer
-
+      knights:
+        range: Knight
+        required: true
+        multivalued: true
   Quest:
     description: A noble quest undertaken in service of the crown
     attributes:
       name:
-        identifier: true
-        required: true
         description: Name of the quest
         range: string
+        required: true
+        identifier: true
       objective:
         description: The primary objective of this quest
         range: string
@@ -70,15 +107,14 @@ classes:
       requires_shrubbery:
         description: Whether a shrubbery must be obtained as part of this quest
         range: boolean
-
   Shrubbery:
     description: A nice shrubbery — not too expensive, with a path through the middle
     attributes:
       name:
-        identifier: true
-        required: true
         description: Descriptive name for this shrubbery
         range: string
+        required: true
+        identifier: true
       price_in_shillings:
         description: Cost in shillings
         range: integer
@@ -88,67 +124,31 @@ classes:
       acquired_from:
         description: Where or from whom the shrubbery was obtained
         range: string
-
   Swallow:
     description: A swallow (African or European) whose coconut-carrying capacity is disputed
     attributes:
       species:
-        identifier: true
-        required: true
         description: The species of swallow
         range: SwallowSpecies
+        required: true
+        identifier: true
       airspeed_velocity_mph:
         description: Unladen airspeed velocity in miles per hour
         range: integer
       can_carry_coconut:
         description: Whether this swallow can carry a coconut
         range: boolean
-
   Witch:
     description: An accused person who may or may not weigh the same as a duck
     attributes:
       name:
-        identifier: true
-        required: true
         description: The accused's name
         range: string
+        required: true
+        identifier: true
       weighs_same_as_duck:
         description: Whether she actually weighs the same as a duck
         range: boolean
       verdict:
         description: Outcome of the official duck-weighing trial
         range: WitchVerdict
-
-enums:
-
-  QuestDifficulty:
-    description: Expected peril level of a knightly quest
-    permissible_values:
-      trivial:
-        description: A mere flesh wound of a challenge
-      moderate:
-        description: Requires planning, bravery, and a good shrubbery
-      perilous:
-        description: Extremely dangerous; beware the rabbit
-      legendary:
-        description: Only the bravest knight who says Ni may attempt this
-
-  SwallowSpecies:
-    description: Species of swallow relevant to coconut-carrying capacity
-    permissible_values:
-      african:
-        description: African swallow — migratory, reportedly stronger
-      european:
-        description: European swallow — non-migratory; coconut capacity unknown
-      unknown:
-        description: Species undetermined; the question may itself be a trap
-
-  WitchVerdict:
-    description: Possible outcomes of the official duck-weighing trial
-    permissible_values:
-      witch:
-        description: She weighs the same as a duck and is therefore a witch
-      not_a_witch:
-        description: Weight differs from a duck; not a witch
-      inconclusive:
-        description: The scales gave no clear answer; further investigation required
