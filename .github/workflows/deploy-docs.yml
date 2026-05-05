@@ -70,7 +70,6 @@ jobs:
         run: |
           mkdir -p packages/docs/.vitepress/dist/app
           cp -r packages/web/dist/. packages/docs/.vitepress/dist/app/
-          cp packages/web/public/_redirects packages/docs/.vitepress/dist/app/
 
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
