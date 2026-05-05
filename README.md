@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://adamlabadorf.github.io/linkml-modeler-app/app/"><img src="https://img.shields.io/badge/Try%20it%20now-live%20demo-blue?style=flat-square" alt="Try it now" /></a>
+  <a href="https://adamlabadorf.github.io/linkml-modeler-app/app/index.html"><img src="https://img.shields.io/badge/Try%20it%20now-live%20demo-blue?style=flat-square" alt="Try it now" /></a>
   <a href="https://adamlabadorf.github.io/linkml-modeler-app/"><img src="https://img.shields.io/badge/docs-site-green?style=flat-square" alt="Docs" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square" alt="MIT License" /></a>
 </p>
