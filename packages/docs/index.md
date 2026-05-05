@@ -11,7 +11,7 @@ hero:
   actions:
     - theme: brand
       text: Try it now
-      link: /app/
+      link: /app/index.html
     - theme: alt
       text: Get Started
       link: /user-guide
