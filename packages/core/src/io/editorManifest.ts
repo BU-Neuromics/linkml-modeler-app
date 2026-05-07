@@ -36,6 +36,7 @@ export interface SchemaManifestEntry {
   layout?: {
     nodes: Record<string, { x: number; y: number; collapsed?: boolean }>;
     viewport?: { x: number; y: number; zoom: number };
+    labels?: Array<{ id: string; text: string; x: number; y: number; fontSize: number; locked: boolean }>;
   };
 }
 
@@ -102,7 +103,7 @@ export function buildManifestData(
     const layout: CanvasLayout =
       sf.id === activeSchemaId && activeLayout ? activeLayout : sf.canvasLayout;
     const visible = !hiddenSchemaIds.has(sf.id);
-    const hasLayout = Object.keys(layout.nodes).length > 0;
+    const hasLayout = Object.keys(layout.nodes).length > 0 || (layout.labels?.length ?? 0) > 0;
 
     if (hasLayout || !visible) {
       const entry: SchemaManifestEntry = {};
@@ -113,6 +114,7 @@ export function buildManifestData(
           ...(layout.viewport.zoom !== 1 || layout.viewport.x !== 0 || layout.viewport.y !== 0
             ? { viewport: layout.viewport }
             : {}),
+          ...(layout.labels?.length ? { labels: layout.labels } : {}),
         };
       }
       schemas[sf.filePath] = entry;
@@ -148,6 +150,7 @@ export function applyManifestToSchemas(
     const canvasLayout: CanvasLayout = {
       nodes: entry.layout.nodes ?? {},
       viewport: entry.layout.viewport ?? { x: 0, y: 0, zoom: 1 },
+      ...(entry.layout.labels?.length ? { labels: entry.layout.labels } : {}),
     };
 
     return { ...sf, canvasLayout };
