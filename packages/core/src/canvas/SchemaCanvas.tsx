@@ -216,6 +216,14 @@ const dlgStyles: Record<string, React.CSSProperties> = {
   },
 };
 
+// ── Edge-type toggle definitions ──────────────────────────────────────────────
+const EDGE_TOGGLE_DEFS = [
+  { type: 'range',    label: 'range',    color: 'var(--color-state-success)' },
+  { type: 'is_a',     label: 'is_a',     color: 'var(--color-accent-hover)' },
+  { type: 'mixin',    label: 'mixin',    color: 'var(--color-edge-mixin)' },
+  { type: 'union_of', label: 'union_of', color: 'var(--color-edge-union)' },
+] as const;
+
 // ── Inner canvas component ────────────────────────────────────────────────────
 function SchemaCanvasInner() {
   const { fitView, screenToFlowPosition } = useReactFlow();
@@ -242,6 +250,8 @@ function SchemaCanvasInner() {
   const setActiveEntity = useAppStore((s) => s.setActiveEntity);
   const clearActiveEntity = useAppStore((s) => s.clearActiveEntity);
   const activeEntity = useAppStore((s) => s.activeEntity);
+  const hiddenEdgeTypes = useAppStore((s) => s.hiddenEdgeTypes);
+  const toggleEdgeTypeVisibility = useAppStore((s) => s.toggleEdgeTypeVisibility);
 
   // Schema mutations
   const addClass = useAppStore((s) => s.addClass);
@@ -669,6 +679,11 @@ function SchemaCanvasInner() {
     }));
   }, [storeNodes, visibleNodeIds]);
 
+  const displayEdges = useMemo(
+    () => storeEdges.filter((e) => !e.type || !hiddenEdgeTypes.has(e.type)),
+    [storeEdges, hiddenEdgeTypes]
+  );
+
   // Empty state
   if (!activeSchemaFile) {
     return (
@@ -686,7 +701,7 @@ function SchemaCanvasInner() {
       <EdgeMarkerDefs />
       <ReactFlow
         nodes={displayNodes}
-        edges={storeEdges}
+        edges={displayEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
@@ -727,6 +742,27 @@ function SchemaCanvasInner() {
 
       {/* Toolbar */}
       <div id="lme-canvas-toolbar" style={styles.toolbar}>
+        {EDGE_TOGGLE_DEFS.map(({ type, label, color }) => {
+          const hidden = hiddenEdgeTypes.has(type);
+          return (
+            <button
+              key={type}
+              id={`lme-canvas-toggle-${type}`}
+              style={{
+                ...styles.toolbarBtn,
+                borderColor: hidden ? 'var(--color-border-default)' : color,
+                color: hidden ? 'var(--color-fg-muted)' : color,
+                opacity: hidden ? 0.5 : 1,
+                textDecoration: hidden ? 'line-through' : 'none',
+              }}
+              onClick={() => toggleEdgeTypeVisibility(type)}
+              title={`${hidden ? 'Show' : 'Hide'} ${label} edges`}
+            >
+              {label}
+            </button>
+          );
+        })}
+        <div style={styles.toolbarSep} />
         {!isReadOnly && (
           <>
             <button
@@ -860,6 +896,13 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
     display: 'flex',
     alignItems: 'center',
+  },
+  toolbarSep: {
+    width: 1,
+    height: 24,
+    background: 'var(--color-border-default)',
+    alignSelf: 'center',
+    flexShrink: 0,
   },
   readOnlyBanner: {
     position: 'absolute',
