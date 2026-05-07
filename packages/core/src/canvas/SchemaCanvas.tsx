@@ -254,6 +254,10 @@ function SchemaCanvasInner() {
   const activeEntity = useAppStore((s) => s.activeEntity);
   const hiddenEdgeTypes = useAppStore((s) => s.hiddenEdgeTypes);
   const toggleEdgeTypeVisibility = useAppStore((s) => s.toggleEdgeTypeVisibility);
+  const highlightOnHover = useAppStore((s) => s.highlightOnHover);
+  const highlightOnSelection = useAppStore((s) => s.highlightOnSelection);
+  const setHighlightOnHover = useAppStore((s) => s.setHighlightOnHover);
+  const setHighlightOnSelection = useAppStore((s) => s.setHighlightOnSelection);
 
   // Schema mutations
   const addClass = useAppStore((s) => s.addClass);
@@ -269,6 +273,8 @@ function SchemaCanvasInner() {
     viewport: { x: 0, y: 0, zoom: 1 },
   });
   const layoutRanRef = useRef(false);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [highlightPinnedNodeId, setHighlightPinnedNodeId] = useState<string | null>(null);
 
   // Refs for manifest writing — always up to date, no closure staleness
   const localLayoutRef = useRef(localLayout);
@@ -448,6 +454,15 @@ function SchemaCanvasInner() {
     [setViewport, scheduleManifestWrite]
   );
 
+  // Node hover → hover highlight
+  const onNodeMouseEnter = useCallback((_: React.MouseEvent, node: Node) => {
+    setHoveredNodeId(node.id);
+  }, []);
+
+  const onNodeMouseLeave = useCallback(() => {
+    setHoveredNodeId(null);
+  }, []);
+
   // Double-click → collapse/expand entity nodes (import groups handle their own click)
   const onNodeDoubleClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
@@ -458,15 +473,18 @@ function SchemaCanvasInner() {
     [toggleNodeCollapsed]
   );
 
-  // Single click on node → select entity
+  // Single click on node → select entity + pin highlight
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       const { entityType, entityId } = node.data as { entityType: string; entityId: string };
       if (entityType === 'class') {
         setActiveEntity({ type: 'class', className: entityId });
+        setHighlightPinnedNodeId(node.id);
       } else if (entityType === 'enum') {
         setActiveEntity({ type: 'enum', enumName: entityId });
+        setHighlightPinnedNodeId(node.id);
       }
+      // importGroupNode clicks don't change the pinned node
     },
     [setActiveEntity]
   );
@@ -490,10 +508,11 @@ function SchemaCanvasInner() {
     [setSelection]
   );
 
-  // Click on pane → deselect
+  // Click on pane → deselect + clear sticky highlight
   const onPaneClick = useCallback(() => {
     clearActiveEntity();
     setContextMenu(null);
+    setHighlightPinnedNodeId(null);
   }, [clearActiveEntity]);
 
   // Connect (drag handle-to-handle) → create is_a relationship
@@ -635,10 +654,11 @@ function SchemaCanvasInner() {
         return;
       }
 
-      // Escape → deselect / exit focus mode
+      // Escape → deselect / exit focus mode / clear sticky highlight
       if (e.key === 'Escape') {
         clearActiveEntity();
         useAppStore.getState().setFocusMode(null);
+        setHighlightPinnedNodeId(null);
         return;
       }
 
@@ -659,6 +679,18 @@ function SchemaCanvasInner() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeEntity, clearActiveEntity, fitView, isReadOnly, storeNodes, setSelection]);
+
+  // Memoized adjacency map: nodeId → Set of connected edge IDs (for O(1) highlight lookup)
+  const edgeNeighborMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const edge of storeEdges) {
+      if (!map.has(edge.source)) map.set(edge.source, new Set());
+      if (!map.has(edge.target)) map.set(edge.target, new Set());
+      map.get(edge.source)!.add(edge.id);
+      map.get(edge.target)!.add(edge.id);
+    }
+    return map;
+  }, [storeEdges]);
 
   // Focus mode dimming
   const visibleNodeIds = useMemo<Set<string> | null>(() => {
@@ -684,10 +716,29 @@ function SchemaCanvasInner() {
     }));
   }, [storeNodes, visibleNodeIds]);
 
-  const displayEdges = useMemo(
-    () => storeEdges.filter((e) => !e.type || !hiddenEdgeTypes.has(e.type)),
-    [storeEdges, hiddenEdgeTypes]
-  );
+  const displayEdges = useMemo(() => {
+    const filtered = storeEdges.filter((e) => !e.type || !hiddenEdgeTypes.has(e.type));
+
+    // Selection (sticky) takes priority over hover
+    let focusNodeId: string | null = null;
+    if (highlightOnSelection && highlightPinnedNodeId) {
+      focusNodeId = highlightPinnedNodeId;
+    } else if (highlightOnHover && hoveredNodeId) {
+      focusNodeId = hoveredNodeId;
+    }
+
+    if (!focusNodeId) return filtered;
+
+    const neighborEdges = edgeNeighborMap.get(focusNodeId) ?? new Set<string>();
+    return filtered.map((edge) => {
+      const isDimmed = !neighborEdges.has(edge.id);
+      return {
+        ...edge,
+        style: { ...edge.style, opacity: isDimmed ? 0.15 : 1, transition: 'opacity 0.15s' },
+        data: { ...edge.data, dimmed: isDimmed },
+      };
+    });
+  }, [storeEdges, hiddenEdgeTypes, highlightOnHover, highlightOnSelection, hoveredNodeId, highlightPinnedNodeId, edgeNeighborMap]);
 
   // Empty state
   if (!activeSchemaFile) {
@@ -714,6 +765,8 @@ function SchemaCanvasInner() {
         onMoveEnd={onMoveEnd}
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeClick={onNodeClick}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
         onConnect={onConnect}
@@ -767,6 +820,31 @@ function SchemaCanvasInner() {
             </button>
           );
         })}
+        <div style={styles.toolbarSep} />
+        <button
+          id="lme-canvas-highlight-hover"
+          style={{
+            ...styles.toolbarBtn,
+            borderColor: highlightOnHover ? 'var(--color-accent-hover)' : 'var(--color-border-default)',
+            color: highlightOnHover ? 'var(--color-accent-hover)' : 'var(--color-fg-muted)',
+          }}
+          onClick={() => setHighlightOnHover(!highlightOnHover)}
+          title={`${highlightOnHover ? 'Disable' : 'Enable'} edge highlight on hover`}
+        >
+          Hover hl
+        </button>
+        <button
+          id="lme-canvas-highlight-selection"
+          style={{
+            ...styles.toolbarBtn,
+            borderColor: highlightOnSelection ? 'var(--color-accent-hover)' : 'var(--color-border-default)',
+            color: highlightOnSelection ? 'var(--color-accent-hover)' : 'var(--color-fg-muted)',
+          }}
+          onClick={() => setHighlightOnSelection(!highlightOnSelection)}
+          title={`${highlightOnSelection ? 'Disable' : 'Enable'} edge highlight on selection`}
+        >
+          Select hl
+        </button>
         <div style={styles.toolbarSep} />
         {!isReadOnly && (
           <>
