@@ -2,7 +2,7 @@
   <img src="logo.svg" width="120" alt="LinkML Visual Schema Editor" />
 </p>
 
-<h1 align="center">LinkML Visual Schema Editor</h1>
+<h1 align="center">LinkML Modeler - A Visual Schema Editor</h1>
 
 <p align="center">
   A cross-platform graphical tool for authoring, editing, and visualizing <a href="https://linkml.io/">LinkML</a> schemas on an ERD-style canvas — without hand-editing YAML.
