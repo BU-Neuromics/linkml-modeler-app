@@ -303,6 +303,27 @@ describe('ProjectSlice — class mutations', () => {
     expect(classes).toHaveProperty('B');
   });
 
+  it('renameClass — migrates canvas layout entry to new name', () => {
+    store.getState().addClass(sf.id, emptyClassDefinition('Animal'));
+    store.getState().updateCanvasLayout(sf.id, { nodes: { Animal: { x: 100, y: 200 } }, viewport: { x: 0, y: 0, zoom: 1 } });
+
+    store.getState().renameClass(sf.id, 'Animal', 'Organism');
+
+    const layout = store.getState().activeProject!.schemas[0].canvasLayout;
+    expect(layout.nodes).not.toHaveProperty('Animal');
+    expect(layout.nodes['Organism']).toEqual({ x: 100, y: 200 });
+  });
+
+  it('renameClass — no-ops canvas layout when entity has no layout entry', () => {
+    store.getState().addClass(sf.id, emptyClassDefinition('Ghost'));
+
+    store.getState().renameClass(sf.id, 'Ghost', 'Specter');
+
+    const layout = store.getState().activeProject!.schemas[0].canvasLayout;
+    expect(layout.nodes).not.toHaveProperty('Ghost');
+    expect(layout.nodes).not.toHaveProperty('Specter');
+  });
+
   it('addAttribute — adds inline attribute to class', () => {
     store.getState().addClass(sf.id, emptyClassDefinition('Person'));
     store.getState().addAttribute(sf.id, 'Person', emptySlotDefinition('name'));

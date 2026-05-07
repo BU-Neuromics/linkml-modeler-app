@@ -262,20 +262,31 @@ export const createProjectSlice: StateCreator<ProjectSlice, [], [], ProjectSlice
     set((state) => {
       if (!state.activeProject) return state;
       return {
-        activeProject: patchSchema(state.activeProject, schemaId, (s) => {
-          if (!s.classes[oldName] || s.classes[newName]) return s;
-          const { [oldName]: classDef, ...rest } = s.classes;
-          // Update references in other classes
-          const updatedClasses: typeof s.classes = { ...rest, [newName]: { ...classDef, name: newName } };
-          for (const [name, cls] of Object.entries(updatedClasses)) {
-            let changed = false;
-            let updated = { ...cls };
-            if (cls.isA === oldName) { updated = { ...updated, isA: newName }; changed = true; }
-            if (cls.mixins.includes(oldName)) { updated = { ...updated, mixins: cls.mixins.map((m) => m === oldName ? newName : m) }; changed = true; }
-            if (changed) updatedClasses[name] = updated;
-          }
-          return { ...s, classes: updatedClasses };
-        }),
+        activeProject: {
+          ...state.activeProject,
+          schemas: state.activeProject.schemas.map((sf) => {
+            if (sf.id !== schemaId) return sf;
+            const s = sf.schema;
+            if (!s.classes[oldName] || s.classes[newName]) return sf;
+            const { [oldName]: classDef, ...rest } = s.classes;
+            // Update references in other classes
+            const updatedClasses: typeof s.classes = { ...rest, [newName]: { ...classDef, name: newName } };
+            for (const [name, cls] of Object.entries(updatedClasses)) {
+              let changed = false;
+              let updated = { ...cls };
+              if (cls.isA === oldName) { updated = { ...updated, isA: newName }; changed = true; }
+              if (cls.mixins.includes(oldName)) { updated = { ...updated, mixins: cls.mixins.map((m) => m === oldName ? newName : m) }; changed = true; }
+              if (changed) updatedClasses[name] = updated;
+            }
+            // Migrate canvas layout entry from old name to new name
+            const oldPos = sf.canvasLayout?.nodes[oldName];
+            if (oldPos !== undefined) {
+              const { [oldName]: _removed, ...restNodes } = sf.canvasLayout.nodes;
+              return { ...sf, schema: { ...s, classes: updatedClasses }, canvasLayout: { ...sf.canvasLayout, nodes: { ...restNodes, [newName]: oldPos } }, isDirty: true };
+            }
+            return { ...sf, schema: { ...s, classes: updatedClasses }, isDirty: true };
+          }),
+        },
       };
     });
   },
@@ -619,14 +630,31 @@ export const createProjectSlice: StateCreator<ProjectSlice, [], [], ProjectSlice
     set((state) => {
       if (!state.activeProject) return state;
       return {
-        activeProject: patchSchema(state.activeProject, schemaId, (s) => {
-          if (!s.enums[oldName] || s.enums[newName]) return s;
-          const { [oldName]: enumDef, ...rest } = s.enums;
-          return {
-            ...s,
-            enums: { ...rest, [newName]: { ...enumDef, name: newName } },
-          };
-        }),
+        activeProject: {
+          ...state.activeProject,
+          schemas: state.activeProject.schemas.map((sf) => {
+            if (sf.id !== schemaId) return sf;
+            const s = sf.schema;
+            if (!s.enums[oldName] || s.enums[newName]) return sf;
+            const { [oldName]: enumDef, ...rest } = s.enums;
+            // Migrate canvas layout entry from old name to new name
+            const oldPos = sf.canvasLayout?.nodes[oldName];
+            if (oldPos !== undefined) {
+              const { [oldName]: _removed, ...restNodes } = sf.canvasLayout.nodes;
+              return {
+                ...sf,
+                schema: { ...s, enums: { ...rest, [newName]: { ...enumDef, name: newName } } },
+                canvasLayout: { ...sf.canvasLayout, nodes: { ...restNodes, [newName]: oldPos } },
+                isDirty: true,
+              };
+            }
+            return {
+              ...sf,
+              schema: { ...s, enums: { ...rest, [newName]: { ...enumDef, name: newName } } },
+              isDirty: true,
+            };
+          }),
+        },
       };
     });
   },

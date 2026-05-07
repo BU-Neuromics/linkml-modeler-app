@@ -261,6 +261,33 @@ describe('ProjectSlice — enum mutations (extra)', () => {
     expect(getSchema(store).enums).toHaveProperty('B');
   });
 
+  it('renameEnum — migrates canvas layout entry to new name', () => {
+    const store = createStore();
+    const sf = makeSchemaFile('core');
+    store.getState().setProject(makeProject('test', [sf]));
+    store.getState().addEnum(sf.id, emptyEnumDefinition('Status'));
+    store.getState().updateCanvasLayout(sf.id, { nodes: { Status: { x: 50, y: 75 } }, viewport: { x: 0, y: 0, zoom: 1 } });
+
+    store.getState().renameEnum(sf.id, 'Status', 'JobStatus');
+
+    const layout = store.getState().activeProject!.schemas[0].canvasLayout;
+    expect(layout.nodes).not.toHaveProperty('Status');
+    expect(layout.nodes['JobStatus']).toEqual({ x: 50, y: 75 });
+  });
+
+  it('renameEnum — no-ops canvas layout when entity has no layout entry', () => {
+    const store = createStore();
+    const sf = makeSchemaFile('core');
+    store.getState().setProject(makeProject('test', [sf]));
+    store.getState().addEnum(sf.id, emptyEnumDefinition('Ghost'));
+
+    store.getState().renameEnum(sf.id, 'Ghost', 'Specter');
+
+    const layout = store.getState().activeProject!.schemas[0].canvasLayout;
+    expect(layout.nodes).not.toHaveProperty('Ghost');
+    expect(layout.nodes).not.toHaveProperty('Specter');
+  });
+
   it('updatePermissibleValue — updates value field', () => {
     const store = createStore();
     const sf = makeSchemaFile('core');
