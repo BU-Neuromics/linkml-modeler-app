@@ -109,10 +109,12 @@ function EdgeLabel({
   x,
   y,
   label,
+  dimmed,
 }: {
   x: number;
   y: number;
   label?: string;
+  dimmed?: boolean;
 }) {
   if (!label) return null;
   return (
@@ -130,6 +132,8 @@ function EdgeLabel({
           color: 'var(--color-fg-secondary)',
           pointerEvents: 'all',
           cursor: 'default',
+          opacity: dimmed ? 0.15 : 1,
+          transition: 'opacity 0.15s',
         }}
         className="nodrag nopan"
       >
@@ -146,6 +150,8 @@ export interface RangeEdgeData extends ElkRouteData {
   required: boolean;
   multivalued: boolean;
   identifier: boolean;
+  /** Set by SchemaCanvas when this edge should be visually dimmed for highlight mode. */
+  dimmed?: boolean;
 }
 
 // ── range edge ─────────────────────────────────────────────────────────────────
@@ -154,6 +160,7 @@ export const RangeEdge = memo(function RangeEdge(props: EdgeProps) {
   const { path, labelX, labelY } = edgePath(props);
   const [hovered, setHovered] = useState(false);
   const data = props.data as RangeEdgeData | undefined;
+  const dimmed = data?.dimmed ?? false;
 
   const badges: string[] = [];
   if (data?.required) badges.push('R');
@@ -192,6 +199,8 @@ export const RangeEdge = memo(function RangeEdge(props: EdgeProps) {
             gap: 3,
             pointerEvents: 'all',
             cursor: 'default',
+            opacity: dimmed ? 0.15 : 1,
+            transition: 'opacity 0.15s',
           }}
           className="nodrag nopan"
           onMouseEnter={() => setHovered(true)}
@@ -283,6 +292,7 @@ export const RangeEdge = memo(function RangeEdge(props: EdgeProps) {
 // the triangle at the parent (UML convention: triangle points at parent).
 export const IsAEdge = memo(function IsAEdge(props: EdgeProps) {
   const { path, labelX, labelY } = edgePath(props);
+  const dimmed = (props.data as { dimmed?: boolean } | undefined)?.dimmed ?? false;
   return (
     <>
       <BaseEdge
@@ -290,7 +300,7 @@ export const IsAEdge = memo(function IsAEdge(props: EdgeProps) {
         markerStart={props.markerStart ?? 'url(#arrow-hollow-start)'}
         style={{ stroke: 'var(--color-accent-hover)', strokeWidth: 2 }}
       />
-      <EdgeLabel x={labelX} y={labelY} label={props.label as string | undefined} />
+      <EdgeLabel x={labelX} y={labelY} label={props.label as string | undefined} dimmed={dimmed} />
     </>
   );
 });
@@ -299,6 +309,7 @@ export const IsAEdge = memo(function IsAEdge(props: EdgeProps) {
 // Dashed line, hollow triangle at the mixin parent (same convention as is_a).
 export const MixinEdge = memo(function MixinEdge(props: EdgeProps) {
   const { path, labelX, labelY } = edgePath(props);
+  const dimmed = (props.data as { dimmed?: boolean } | undefined)?.dimmed ?? false;
   return (
     <>
       <BaseEdge
@@ -306,7 +317,7 @@ export const MixinEdge = memo(function MixinEdge(props: EdgeProps) {
         markerStart={props.markerStart ?? 'url(#arrow-hollow-start)'}
         style={{ stroke: 'var(--color-edge-mixin)', strokeWidth: 1.5, strokeDasharray: '6 3' }}
       />
-      <EdgeLabel x={labelX} y={labelY} label={props.label as string | undefined} />
+      <EdgeLabel x={labelX} y={labelY} label={props.label as string | undefined} dimmed={dimmed} />
     </>
   );
 });
@@ -315,13 +326,14 @@ export const MixinEdge = memo(function MixinEdge(props: EdgeProps) {
 // Dotted line, no arrowhead.
 export const UnionOfEdge = memo(function UnionOfEdge(props: EdgeProps) {
   const { path, labelX, labelY } = edgePath(props);
+  const dimmed = (props.data as { dimmed?: boolean } | undefined)?.dimmed ?? false;
   return (
     <>
       <BaseEdge
         path={path}
         style={{ stroke: 'var(--color-edge-union)', strokeWidth: 1.5, strokeDasharray: '2 4' }}
       />
-      <EdgeLabel x={labelX} y={labelY} label={props.label as string | undefined} />
+      <EdgeLabel x={labelX} y={labelY} label={props.label as string | undefined} dimmed={dimmed} />
     </>
   );
 });
