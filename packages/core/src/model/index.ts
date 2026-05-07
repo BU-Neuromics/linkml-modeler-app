@@ -228,6 +228,8 @@ export interface CanvasLayout {
   nodes: Record<string, NodeLayout>; // keyed by class/enum name
   /** Per-edge bend points from ELK; ephemeral (not persisted to manifest). */
   edges?: Record<string, EdgeLayout>;
+  /** Editor-only text label annotations (persisted to .linkml-editor.yaml, not schema YAML). */
+  labels?: TextLabel[];
   viewport: { x: number; y: number; zoom: number };
 }
 
@@ -240,6 +242,16 @@ export interface NodeLayout {
 /** Intermediate bend points only (no start/end — ReactFlow provides those). */
 export interface EdgeLayout {
   bendPoints: Array<{ x: number; y: number }>;
+}
+
+/** Editor-only text annotation on the canvas; never serialized to schema YAML. */
+export interface TextLabel {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  fontSize: number; // 10–48, default 14
+  locked: boolean;
 }
 
 // ─── Factories / helpers ─────────────────────────────────────────────────────
