@@ -11,6 +11,19 @@ export interface Toast {
   durationMs?: number;
 }
 
+const HIDDEN_EDGE_TYPES_KEY = 'linkml-editor-hidden-edge-types';
+
+function loadHiddenEdgeTypes(): Set<string> {
+  try {
+    const raw = localStorage.getItem(HIDDEN_EDGE_TYPES_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr as string[]);
+    }
+  } catch { /* ignore */ }
+  return new Set();
+}
+
 export interface UISlice {
   // State
   theme: Theme;
@@ -21,6 +34,8 @@ export interface UISlice {
   syncStatus: SyncStatus; // null = not in cloud mode
   /** Schema IDs that are hidden in the project panel / canvas */
   hiddenSchemaIds: Set<string>;
+  /** Edge types that are hidden on the canvas (filtered at render time, not from state) */
+  hiddenEdgeTypes: Set<string>;
 
   // Actions
   setTheme(theme: Theme): void;
@@ -33,6 +48,8 @@ export interface UISlice {
   setSchemaVisible(schemaId: string, visible: boolean): void;
   /** Bulk-set hidden IDs, typically called when loading a project manifest. */
   setHiddenSchemaIds(ids: Set<string>): void;
+  /** Toggle visibility for a single edge type. Persisted to localStorage. */
+  toggleEdgeTypeVisibility(type: string): void;
 }
 
 let toastCounter = 0;
@@ -45,6 +62,7 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   zoom: 1,
   syncStatus: null,
   hiddenSchemaIds: new Set(),
+  hiddenEdgeTypes: loadHiddenEdgeTypes(),
 
   setTheme(theme) {
     set({ theme });
@@ -86,5 +104,15 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
 
   setHiddenSchemaIds(ids) {
     set({ hiddenSchemaIds: ids });
+  },
+
+  toggleEdgeTypeVisibility(type) {
+    set((state) => {
+      const next = new Set(state.hiddenEdgeTypes);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      try { localStorage.setItem(HIDDEN_EDGE_TYPES_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+      return { hiddenEdgeTypes: next };
+    });
   },
 });
