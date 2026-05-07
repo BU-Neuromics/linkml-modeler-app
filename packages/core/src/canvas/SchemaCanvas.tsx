@@ -31,6 +31,7 @@ import 'reactflow/dist/style.css';
 import ClassNode from './ClassNode.js';
 import EnumNode from './EnumNode.js';
 import ImportGroupNode from './ImportGroupNode.js';
+import LabelNode from './LabelNode.js';
 import { Diamond, Hexagon, Plus } from '../ui/icons/index.js';
 import { edgeTypes, EdgeMarkerDefs } from './edges.js';
 import { deriveGraph } from './deriveGraph.js';
@@ -39,7 +40,7 @@ import { useAppStore } from '../store/index.js';
 import { usePlatform } from '../platform/PlatformContext.js';
 import { collectReferencedImportedEntities } from '../io/importResolver.js';
 import { buildManifestData, writeEditorManifest } from '../io/editorManifest.js';
-import type { CanvasLayout } from '../model/index.js';
+import type { CanvasLayout, TextLabel } from '../model/index.js';
 import { emptyClassDefinition, emptyEnumDefinition } from '../model/index.js';
 
 // ── CSS token reader (for SVG/canvas contexts that require concrete color values) ──
@@ -53,6 +54,7 @@ const nodeTypes = {
   classNode: ClassNode,
   enumNode: EnumNode,
   importGroupNode: ImportGroupNode,
+  labelNode: LabelNode,
 } as unknown as NodeTypes;
 
 // ── Context menu ──────────────────────────────────────────────────────────────
@@ -69,12 +71,14 @@ function CanvasContextMenu({
   onClose,
   onAddClass,
   onAddEnum,
+  onAddLabel,
   onDeleteNode,
 }: {
   menu: ContextMenu;
   onClose: () => void;
   onAddClass: (pos: XYPosition) => void;
   onAddEnum: (pos: XYPosition) => void;
+  onAddLabel: (pos: XYPosition) => void;
   onDeleteNode: (nodeId: string) => void;
 }) {
   return (
@@ -89,7 +93,7 @@ function CanvasContextMenu({
       {menu.nodeId ? (
         <>
           <div style={ctxStyles.item} onClick={() => { onDeleteNode(menu.nodeId!); onClose(); }}>
-            🗑 Delete {menu.nodeType === 'enumNode' ? 'enum' : 'class'}
+            🗑 Delete {menu.nodeType === 'enumNode' ? 'enum' : menu.nodeType === 'labelNode' ? 'label' : 'class'}
           </div>
         </>
       ) : (
@@ -99,6 +103,9 @@ function CanvasContextMenu({
           </div>
           <div style={ctxStyles.item} onClick={() => { onAddEnum(menu.canvasPos); onClose(); }}>
             <Diamond size={13} style={{ marginRight: 6 }} /> Add Enum
+          </div>
+          <div style={ctxStyles.item} onClick={() => { onAddLabel(menu.canvasPos); onClose(); }}>
+            <span style={{ marginRight: 6, fontSize: 13 }}>T</span> Add Label
           </div>
         </>
       )}
@@ -267,6 +274,11 @@ function SchemaCanvasInner() {
   const updateClass = useAppStore((s) => s.updateClass);
   const autoAddImportForRange = useAppStore((s) => s.autoAddImportForRange);
 
+  // Label mutations
+  const addLabelToCanvas = useAppStore((s) => s.addLabelToCanvas);
+  const updateLabelInCanvas = useAppStore((s) => s.updateLabelInCanvas);
+  const deleteLabelFromCanvas = useAppStore((s) => s.deleteLabelFromCanvas);
+
   // Local state
   const [localLayout, setLocalLayout] = useState<CanvasLayout>({
     nodes: {},
@@ -305,6 +317,13 @@ function SchemaCanvasInner() {
   );
 
   const isReadOnly = activeSchemaFile?.isReadOnly ?? false;
+
+  // Sync store labels → localLayout when they change (handles undo/redo + create/edit/delete)
+  // Position-only updates during drag don't touch the store, so this won't overwrite in-progress drags.
+  const storeLabels = activeSchemaFile?.canvasLayout.labels;
+  useEffect(() => {
+    setLocalLayout((prev) => ({ ...prev, labels: storeLabels ?? [] }));
+  }, [storeLabels]);
 
   // Collect only referenced imported entities (not all entities from imported schemas)
   const ghostEntities = useMemo(
@@ -422,22 +441,41 @@ function SchemaCanvasInner() {
       let positionChanged = false;
       for (const change of changes) {
         if (change.type === 'position' && change.position) {
-          setLocalLayout((prev) => ({
-            ...prev,
-            nodes: {
-              ...prev.nodes,
-              [change.id]: { x: change.position!.x, y: change.position!.y },
-            },
-            // Any node drag invalidates all ELK bend points (routing is now stale)
-            edges: undefined,
-          }));
-          updateNodePosition(change.id, change.position.x, change.position.y);
-          positionChanged = true;
+          if (change.id.startsWith('label__')) {
+            const labelId = change.id.slice('label__'.length);
+            setLocalLayout((prev) => ({
+              ...prev,
+              labels: (prev.labels ?? []).map((l) =>
+                l.id === labelId
+                  ? { ...l, x: change.position!.x, y: change.position!.y }
+                  : l
+              ),
+            }));
+            // Commit final position to store on drag end (creates one undo entry)
+            if (!change.dragging && activeSchemaId) {
+              const finalPos = localLayoutRef.current.labels?.find((l) => l.id === labelId);
+              if (finalPos) {
+                updateLabelInCanvas(activeSchemaId, labelId, { x: finalPos.x, y: finalPos.y });
+              }
+            }
+            positionChanged = true;
+          } else {
+            setLocalLayout((prev) => ({
+              ...prev,
+              nodes: {
+                ...prev.nodes,
+                [change.id]: { x: change.position!.x, y: change.position!.y },
+              },
+              edges: undefined,
+            }));
+            updateNodePosition(change.id, change.position.x, change.position.y);
+            positionChanged = true;
+          }
         }
       }
       if (positionChanged) scheduleManifestWrite();
     },
-    [storeNodes, setNodes, updateNodePosition, scheduleManifestWrite]
+    [storeNodes, setNodes, updateNodePosition, scheduleManifestWrite, activeSchemaId, updateLabelInCanvas]
   );
 
   const onEdgesChange: OnEdgesChange = useCallback(
@@ -463,10 +501,10 @@ function SchemaCanvasInner() {
     setHoveredNodeId(null);
   }, []);
 
-  // Double-click → collapse/expand entity nodes (import groups handle their own click)
+  // Double-click → collapse/expand entity nodes (import groups and labels handle their own click)
   const onNodeDoubleClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      if (node.type !== 'importGroupNode') {
+      if (node.type !== 'importGroupNode' && node.type !== 'labelNode') {
         toggleNodeCollapsed(node.id);
       }
     },
@@ -483,8 +521,11 @@ function SchemaCanvasInner() {
       } else if (entityType === 'enum') {
         setActiveEntity({ type: 'enum', enumName: entityId });
         setHighlightPinnedNodeId(node.id);
+      } else if (entityType === 'label') {
+        setActiveEntity({ type: 'label', labelId: entityId });
+        setHighlightPinnedNodeId(null);
       }
-      // importGroupNode clicks don't change the pinned node
+      // importGroupNode clicks don't change the active entity
     },
     [setActiveEntity]
   );
@@ -599,16 +640,42 @@ function SchemaCanvasInner() {
     [activeSchemaId, activeProject, addEnum, setActiveEntity]
   );
 
+  // Add label at position
+  const handleAddLabel = useCallback(
+    (pos: XYPosition) => {
+      if (!activeSchemaId) return;
+      const id = crypto.randomUUID();
+      const label: TextLabel = {
+        id,
+        text: 'Label',
+        x: pos.x,
+        y: pos.y,
+        fontSize: 14,
+        locked: false,
+      };
+      addLabelToCanvas(activeSchemaId, label);
+      setActiveEntity({ type: 'label', labelId: id });
+    },
+    [activeSchemaId, addLabelToCanvas, setActiveEntity]
+  );
+
   // Delete node from context menu
   const handleDeleteNode = useCallback(
     (nodeId: string) => {
       if (!activeSchemaId) return;
+      // Label nodes have a 'label__' prefix
+      if (nodeId.startsWith('label__')) {
+        const labelId = nodeId.slice('label__'.length);
+        deleteLabelFromCanvas(activeSchemaId, labelId);
+        clearActiveEntity();
+        return;
+      }
       const schema = activeProject?.schemas.find((s) => s.id === activeSchemaId)?.schema;
       if (!schema) return;
       const type = nodeId in schema.classes ? 'class' : 'enum';
       setDeleteTarget({ name: nodeId, type });
     },
-    [activeSchemaId, activeProject]
+    [activeSchemaId, activeProject, deleteLabelFromCanvas, clearActiveEntity]
   );
 
   const confirmDelete = useCallback(() => {
@@ -649,6 +716,9 @@ function SchemaCanvasInner() {
             setDeleteTarget({ name: activeEntity.className, type: 'class' });
           } else if (activeEntity?.type === 'enum') {
             setDeleteTarget({ name: activeEntity.enumName, type: 'enum' });
+          } else if (activeEntity?.type === 'label' && activeSchemaId) {
+            deleteLabelFromCanvas(activeSchemaId, activeEntity.labelId);
+            clearActiveEntity();
           }
         }
         return;
@@ -678,7 +748,7 @@ function SchemaCanvasInner() {
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeEntity, clearActiveEntity, fitView, isReadOnly, storeNodes, setSelection]);
+  }, [activeEntity, clearActiveEntity, fitView, isReadOnly, storeNodes, setSelection, activeSchemaId, deleteLabelFromCanvas]);
 
   // Memoized adjacency map: nodeId → Set of connected edge IDs (for O(1) highlight lookup)
   const edgeNeighborMap = useMemo(() => {
@@ -903,6 +973,7 @@ function SchemaCanvasInner() {
           onClose={() => setContextMenu(null)}
           onAddClass={handleAddClass}
           onAddEnum={handleAddEnum}
+          onAddLabel={handleAddLabel}
           onDeleteNode={handleDeleteNode}
         />
       )}

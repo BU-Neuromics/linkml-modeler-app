@@ -6,6 +6,7 @@ import { ClassPanel } from './ClassPanel.js';
 import { EnumPanel } from './EnumPanel.js';
 import { EdgePanel } from './EdgePanel.js';
 import { SchemaMetaPanel } from './SchemaMetaPanel.js';
+import { LabelPanel } from './LabelPanel.js';
 import { styles } from './styles.js';
 
 export { parseRangeEdgeId } from './parseRangeEdgeId.js';
@@ -52,6 +53,8 @@ export function PropertiesPanel() {
         return <EnumPanel schemaId={schemaId} enumName={activeEntity.enumName} />;
       case 'edge':
         return <EdgePanel edgeId={activeEntity.edgeId} />;
+      case 'label':
+        return <LabelPanel labelId={activeEntity.labelId} />;
       default:
         return <EmptyPanel />;
     }
@@ -80,6 +83,7 @@ export function PropertiesPanel() {
           {activeEntity.type === 'slot' && `${activeEntity.className} › ${activeEntity.slotName}`}
           {activeEntity.type === 'enum' && `enum: ${activeEntity.enumName}`}
           {activeEntity.type === 'edge' && `edge: ${activeEntity.edgeId.split('__')[0]}`}
+          {activeEntity.type === 'label' && `label`}
         </div>
       )}
 
