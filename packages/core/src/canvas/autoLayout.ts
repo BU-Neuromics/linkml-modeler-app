@@ -115,7 +115,7 @@ export async function runAutoLayout(
 
   // ── Add edges from class relationships ────────────────────────────────────
   for (const [className, classDef] of Object.entries(schema.classes)) {
-    // is_a
+    // is_a — feed ELK with parent as source so it lays the parent above the child
     if (classDef.isA) {
       const targetId = allIds.has(classDef.isA)
         ? classDef.isA
@@ -123,15 +123,15 @@ export async function runAutoLayout(
         ? `ghost__${classDef.isA}`
         : null;
       if (targetId) {
-        addEdge(elkEdges, edgeSeen, `isa__${className}__${classDef.isA}`, className, targetId);
+        addEdge(elkEdges, edgeSeen, `isa__${className}__${classDef.isA}`, targetId, className);
       }
     }
 
-    // mixins
+    // mixins — same reversal so mixin parents render above children
     for (const m of classDef.mixins) {
       const targetId = allIds.has(m) ? m : allGhostIds.has(`ghost__${m}`) ? `ghost__${m}` : null;
       if (targetId) {
-        addEdge(elkEdges, edgeSeen, `mixin__${className}__${m}`, className, targetId);
+        addEdge(elkEdges, edgeSeen, `mixin__${className}__${m}`, targetId, className);
       }
     }
 

@@ -206,14 +206,15 @@ export const RangeEdge = memo(function RangeEdge(props: EdgeProps) {
 });
 
 // ── is_a edge ─────────────────────────────────────────────────────────────────
-// Solid line, UML hollow triangle arrowhead.
+// Solid line, UML hollow triangle. Edge source=parent so markerStart places
+// the triangle at the parent (UML convention: triangle points at parent).
 export const IsAEdge = memo(function IsAEdge(props: EdgeProps) {
   const { path, labelX, labelY } = edgePath(props);
   return (
     <>
       <BaseEdge
         path={path}
-        markerEnd={props.markerEnd ?? 'url(#arrow-hollow)'}
+        markerStart={props.markerStart ?? 'url(#arrow-hollow-start)'}
         style={{ stroke: 'var(--color-accent-hover)', strokeWidth: 2 }}
       />
       <EdgeLabel x={labelX} y={labelY} label={props.label as string | undefined} />
@@ -222,14 +223,14 @@ export const IsAEdge = memo(function IsAEdge(props: EdgeProps) {
 });
 
 // ── mixin edge ────────────────────────────────────────────────────────────────
-// Dashed line, hollow triangle arrowhead.
+// Dashed line, hollow triangle at the mixin parent (same convention as is_a).
 export const MixinEdge = memo(function MixinEdge(props: EdgeProps) {
   const { path, labelX, labelY } = edgePath(props);
   return (
     <>
       <BaseEdge
         path={path}
-        markerEnd={props.markerEnd ?? 'url(#arrow-hollow)'}
+        markerStart={props.markerStart ?? 'url(#arrow-hollow-start)'}
         style={{ stroke: 'var(--color-edge-mixin)', strokeWidth: 1.5, strokeDasharray: '6 3' }}
       />
       <EdgeLabel x={labelX} y={labelY} label={props.label as string | undefined} />
@@ -272,7 +273,7 @@ export function EdgeMarkerDefs() {
           <polygon points="0 0, 10 3.5, 0 7" style={{ fill: 'var(--color-state-success)' }} />
         </marker>
 
-        {/* Hollow triangle arrowhead for is_a / mixin edges */}
+        {/* Hollow triangle arrowhead for is_a / mixin edges (markerEnd usage) */}
         <marker
           id="arrow-hollow"
           markerWidth="12"
@@ -280,6 +281,23 @@ export function EdgeMarkerDefs() {
           refX="10"
           refY="5"
           orient="auto"
+        >
+          <polygon
+            points="0 0, 10 5, 0 10"
+            style={{ fill: 'none', stroke: 'var(--color-accent-hover)', strokeWidth: 1.5 }}
+          />
+        </marker>
+
+        {/* Hollow triangle for markerStart on is_a / mixin edges (source=parent).
+            auto-start-reverse makes the triangle body extend away from the node,
+            so it is visible in the space between parent and child. */}
+        <marker
+          id="arrow-hollow-start"
+          markerWidth="12"
+          markerHeight="10"
+          refX="10"
+          refY="5"
+          orient="auto-start-reverse"
         >
           <polygon
             points="0 0, 10 5, 0 10"

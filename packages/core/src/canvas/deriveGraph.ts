@@ -183,25 +183,25 @@ export function deriveGraph(
       height: CLASS_NODE_HEIGHT,
     });
 
-    // ── is_a edge ──────────────────────────────────────────────────────────
+    // ── is_a edge — source=parent so the bottom handle exits toward the child ──
     if (classDef.isA && schema.classes[classDef.isA]) {
       edges.push({
         id: `isa__${className}__${classDef.isA}`,
         type: 'is_a' as LinkMLEdgeType,
-        source: className,
-        target: classDef.isA,
+        source: classDef.isA,
+        target: className,
         animated: false,
       });
     }
 
-    // ── mixin edges ────────────────────────────────────────────────────────
+    // ── mixin edges — source=mixin parent for same handle direction ────────
     for (const mixinName of classDef.mixins) {
       if (schema.classes[mixinName]) {
         edges.push({
           id: `mixin__${className}__${mixinName}`,
           type: 'mixin' as LinkMLEdgeType,
-          source: className,
-          target: mixinName,
+          source: mixinName,
+          target: className,
           animated: false,
         });
       }
@@ -488,29 +488,29 @@ export function deriveGraph(
       }
     }
 
-    // is_a edge to ghost
+    // is_a edge to ghost — source=ghost parent so handle direction is consistent
     if (classDef.isA) {
       const ghostId = `ghost__${classDef.isA}`;
       if (allGhostIds.has(ghostId)) {
         edges.push({
           id: `isa__${className}__${classDef.isA}`,
           type: 'is_a' as LinkMLEdgeType,
-          source: className,
-          target: ghostId,
+          source: ghostId,
+          target: className,
           animated: false,
         });
       }
     }
 
-    // mixin edges to ghost
+    // mixin edges to ghost — same reversal
     for (const mixinName of classDef.mixins) {
       const ghostId = `ghost__${mixinName}`;
       if (allGhostIds.has(ghostId)) {
         edges.push({
           id: `mixin__${className}__${mixinName}`,
           type: 'mixin' as LinkMLEdgeType,
-          source: className,
-          target: ghostId,
+          source: ghostId,
+          target: className,
           animated: false,
         });
       }
