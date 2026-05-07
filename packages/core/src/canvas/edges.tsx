@@ -21,6 +21,9 @@ import {
 /** Bend-point data attached by deriveGraph when ELK routing is available. */
 export interface ElkRouteData {
   elkPoints?: Array<{ x: number; y: number }>;
+  /** Set by deriveGraph when multiple edges share the same source+target node pair. */
+  parallelIndex?: number;
+  parallelCount?: number;
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -87,18 +90,43 @@ function buildElkPath(
   return { path: d, labelX, labelY };
 }
 
+/** Pixels between adjacent parallel edges in the same source→target group. */
+const PARALLEL_STEP = 8;
+
 function edgePath(props: EdgeProps) {
   const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition } = props;
-  const elkPoints = (props.data as ElkRouteData | undefined)?.elkPoints;
+  const data = props.data as ElkRouteData | undefined;
+  const elkPoints = data?.elkPoints;
+
+  // Compute perpendicular offset so parallel edges between the same node pair fan out.
+  let ox = 0;
+  let oy = 0;
+  const pCount = data?.parallelCount ?? 1;
+  const pIndex = data?.parallelIndex ?? 0;
+  if (pCount > 1) {
+    const dx = targetX - sourceX;
+    const dy = targetY - sourceY;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len > 0) {
+      // Perpendicular unit vector (rotate 90° CCW)
+      const offset = (pIndex - (pCount - 1) / 2) * PARALLEL_STEP;
+      ox = (-dy / len) * offset;
+      oy = (dx / len) * offset;
+    }
+  }
+
   if (elkPoints && elkPoints.length > 0) {
-    return buildElkPath(sourceX, sourceY, targetX, targetY, elkPoints);
+    const pts = ox !== 0 || oy !== 0
+      ? elkPoints.map((p) => ({ x: p.x + ox, y: p.y + oy }))
+      : elkPoints;
+    return buildElkPath(sourceX + ox, sourceY + oy, targetX + ox, targetY + oy, pts);
   }
   const [path, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
+    sourceX: sourceX + ox,
+    sourceY: sourceY + oy,
     sourcePosition,
-    targetX,
-    targetY,
+    targetX: targetX + ox,
+    targetY: targetY + oy,
     targetPosition,
     borderRadius: 8,
   });

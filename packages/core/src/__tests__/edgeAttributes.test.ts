@@ -352,6 +352,60 @@ classes:
         range: string
 `.trim();
 
+// ── 5b. Parallel edge annotation ─────────────────────────────────────────────
+const PARALLEL_YAML = `
+id: https://example.org/paralleltest
+name: paralleltest
+prefixes:
+  linkml: https://w3id.org/linkml/
+default_prefix: paralleltest
+imports:
+  - linkml:types
+classes:
+  A:
+    attributes:
+      foo:
+        range: B
+      bar:
+        range: B
+  B:
+    attributes:
+      name:
+        range: string
+`.trim();
+
+describe('Parallel edge annotation', () => {
+  it('annotates both edges with parallelCount=2 when two slots share the same target', () => {
+    const schema = parseYaml(PARALLEL_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {});
+
+    const parallel = graph.edges.filter(
+      (e) => e.source === 'A' && e.target === 'B'
+    );
+    expect(parallel).toHaveLength(2);
+    for (const edge of parallel) {
+      expect((edge.data as { parallelCount?: number }).parallelCount).toBe(2);
+    }
+    const indices = parallel.map((e) => (e.data as { parallelIndex?: number }).parallelIndex);
+    expect(indices.sort()).toEqual([0, 1]);
+  });
+
+  it('does not annotate a single edge between a given node pair', () => {
+    const schema = parseYaml(PARALLEL_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {});
+
+    // B has no outgoing range edges to A, so any A→B edge should get parallelCount=2
+    // and edges that have no parallel partner should have no parallelCount field
+    const singleEdges = graph.edges.filter(
+      (e) => !(e.source === 'A' && e.target === 'B')
+    );
+    for (const edge of singleEdges) {
+      expect((edge.data as { parallelCount?: number }).parallelCount).toBeUndefined();
+    }
+  });
+});
+
+// ── 5. Self-reference suppression ────────────────────────────────────────────
 describe('Self-reference slot handling', () => {
   it('emits no edge with source === target for a self-ranging attribute', () => {
     const schema = parseYaml(SELF_REF_YAML);

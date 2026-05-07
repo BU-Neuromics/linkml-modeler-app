@@ -559,6 +559,24 @@ export function deriveGraph(
     }
   }
 
+  // ── Parallel edge annotation ────────────────────────────────────────────────
+  // Group edges that share the same source+target (directional) and assign
+  // parallelIndex / parallelCount so the renderer can fan them out visually.
+  const parallelGroups = new Map<string, Edge[]>();
+  for (const edge of edges) {
+    const key = `${edge.source}||${edge.target}`;
+    const group = parallelGroups.get(key) ?? [];
+    group.push(edge);
+    parallelGroups.set(key, group);
+  }
+  for (const group of parallelGroups.values()) {
+    if (group.length > 1) {
+      group.forEach((edge, i) => {
+        edge.data = { ...(edge.data ?? {}), parallelIndex: i, parallelCount: group.length };
+      });
+    }
+  }
+
   // ── Label nodes (editor-only text annotations) ─────────────────────────────
   for (const label of layout.labels ?? []) {
     const labelNodeData: LabelNodeData = {
