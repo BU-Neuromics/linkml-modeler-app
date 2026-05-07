@@ -22,7 +22,7 @@ export interface ClassNodeData extends CanvasNodeData {
 
 const SLOT_LIMIT_EXPANDED = 20;
 
-function SlotRow({ resolved }: { resolved: ResolvedSlot }) {
+function SlotRow({ resolved, isSelfRef }: { resolved: ResolvedSlot; isSelfRef?: boolean }) {
   const { slot, kind, hasUsageOverride, inherited, inheritedFrom } = resolved;
   const badges: string[] = [];
   if (slot.required) badges.push('R');
@@ -62,6 +62,12 @@ function SlotRow({ resolved }: { resolved: ResolvedSlot }) {
         {badges.map((b) => (
           <span key={b} style={styles.badge}>{b}</span>
         ))}
+        {isSelfRef && (
+          <span
+            style={{ ...styles.badge, color: 'var(--color-state-warning)', cursor: 'help' }}
+            title={`Self-reference: range=${slot.range}${slot.multivalued ? ', multivalued' : ''}${slot.required ? ', required' : ''}`}
+          >↻</span>
+        )}
       </span>
     </div>
   );
@@ -125,7 +131,7 @@ function ClassNode({ data, selected }: NodeProps<ClassNodeData>) {
       {!collapsed && (
         <div style={styles.body}>
           {visibleSlots.map((r) => (
-            <SlotRow key={r.slot.name} resolved={r} />
+            <SlotRow key={r.slot.name} resolved={r} isSelfRef={r.slot.range === data.entityId} />
           ))}
           {hiddenCount > 0 && (
             <div style={styles.moreRow}>+{hiddenCount} more…</div>

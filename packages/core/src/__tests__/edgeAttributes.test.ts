@@ -332,3 +332,53 @@ describe('Round-trip: edge attribute edit serializes correctly to YAML', () => {
     });
   });
 });
+
+// ── 5. Self-reference suppression ────────────────────────────────────────────
+const SELF_REF_YAML = `
+id: https://example.org/selfref
+name: selfref
+prefixes:
+  linkml: https://w3id.org/linkml/
+default_prefix: selfref
+imports:
+  - linkml:types
+classes:
+  Node:
+    attributes:
+      children:
+        range: Node
+        multivalued: true
+      label:
+        range: string
+`.trim();
+
+describe('Self-reference slot handling', () => {
+  it('emits no edge with source === target for a self-ranging attribute', () => {
+    const schema = parseYaml(SELF_REF_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {});
+
+    const selfEdges = graph.edges.filter((e) => e.source === e.target);
+    expect(selfEdges).toHaveLength(0);
+  });
+
+  it('self-referencing slot still appears in resolvedSlots on the node', () => {
+    const schema = parseYaml(SELF_REF_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {});
+
+    const nodeNode = graph.nodes.find((n) => n.id === 'Node');
+    expect(nodeNode).toBeDefined();
+    const resolvedSlots = (nodeNode!.data as { resolvedSlots?: Array<{ slot: { name: string } }> }).resolvedSlots ?? [];
+    const childrenSlot = resolvedSlots.find((r) => r.slot.name === 'children');
+    expect(childrenSlot).toBeDefined();
+  });
+
+  it('non-self range edges are still emitted normally', () => {
+    const schema = parseYaml(SELF_REF_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {});
+
+    // "label" has range: string which is not in schema.classes or schema.enums,
+    // so no edge is expected for it either — but Node should have no range edges at all
+    const nodeRangeEdges = graph.edges.filter((e) => e.type === 'range' && e.source === 'Node');
+    expect(nodeRangeEdges).toHaveLength(0);
+  });
+});

@@ -225,6 +225,7 @@ export function deriveGraph(
     // ── range edges (from attributes) ─────────────────────────────────────
     for (const [slotName, slot] of Object.entries(classDef.attributes)) {
       if (!slot.range) continue;
+      if (slot.range === className) continue; // self-reference: render badge on slot row instead
       const rangeIsClass = slot.range in schema.classes;
       const rangeIsEnum = slot.range in schema.enums;
       if (rangeIsClass || rangeIsEnum) {
@@ -253,6 +254,7 @@ export function deriveGraph(
       const usage = classDef.slotUsage[slotName];
       const effectiveRange = usage?.range ?? schemaSlot.range;
       if (!effectiveRange) continue;
+      if (effectiveRange === className) continue; // self-reference: render badge on slot row instead
       const edgeId = `range__${className}__${slotName}__${effectiveRange}`;
       if (edges.find((e) => e.id === edgeId)) continue; // avoid duplicates with attribute edges
       const rangeIsClass = effectiveRange in schema.classes;
@@ -436,6 +438,7 @@ export function deriveGraph(
     // Range edges (attributes)
     for (const [slotName, slot] of Object.entries(classDef.attributes)) {
       if (!slot.range) continue;
+      if (slot.range === className) continue; // self-reference: no edge
       const ghostId = `ghost__${slot.range}`;
       if (
         allGhostIds.has(ghostId) &&
@@ -466,6 +469,7 @@ export function deriveGraph(
       const usage = classDef.slotUsage[slotName];
       const effectiveRange = usage?.range ?? schemaSlot.range;
       if (!effectiveRange) continue;
+      if (effectiveRange === className) continue; // self-reference: no edge
       const ghostId = `ghost__${effectiveRange}`;
       const edgeId = `range__${className}__${slotName}__${effectiveRange}`;
       if (allGhostIds.has(ghostId) && !edges.find((e) => e.id === edgeId)) {
