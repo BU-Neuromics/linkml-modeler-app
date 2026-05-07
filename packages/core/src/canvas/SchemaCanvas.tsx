@@ -407,6 +407,8 @@ function SchemaCanvasInner() {
               ...prev.nodes,
               [change.id]: { x: change.position!.x, y: change.position!.y },
             },
+            // Any node drag invalidates all ELK bend points (routing is now stale)
+            edges: undefined,
           }));
           updateNodePosition(change.id, change.position.x, change.position.y);
           positionChanged = true;

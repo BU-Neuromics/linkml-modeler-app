@@ -16,10 +16,83 @@ import {
   BaseEdge,
 } from 'reactflow';
 
+// ── ELK route data ────────────────────────────────────────────────────────────
+
+/** Bend-point data attached by deriveGraph when ELK routing is available. */
+export interface ElkRouteData {
+  elkPoints?: Array<{ x: number; y: number }>;
+}
+
 // ── Shared helpers ────────────────────────────────────────────────────────────
+
+function fmt(n: number): string {
+  return Number.isFinite(n) ? n.toFixed(2) : '0';
+}
+
+/**
+ * Build an SVG path from ELK bend points (intermediate only) + ReactFlow
+ * source/target coordinates. Corners are rounded with an 8 px radius.
+ * Falls back to getSmoothStepPath when no bend points are available.
+ */
+function buildElkPath(
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+  bendPoints: Array<{ x: number; y: number }>
+): { path: string; labelX: number; labelY: number } {
+  const allPts = [{ x: sourceX, y: sourceY }, ...bendPoints, { x: targetX, y: targetY }];
+  const R = 8;
+
+  // Segment vectors and lengths
+  const segs = allPts.slice(0, -1).map((pt, i) => {
+    const dx = allPts[i + 1].x - pt.x;
+    const dy = allPts[i + 1].y - pt.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    return { dx, dy, len, ux: len > 0 ? dx / len : 0, uy: len > 0 ? dy / len : 0 };
+  });
+
+  let d = `M ${fmt(sourceX)} ${fmt(sourceY)}`;
+
+  for (let i = 0; i < segs.length; i++) {
+    const seg = segs[i];
+    const corner = allPts[i + 1];
+    if (i < segs.length - 1) {
+      // Rounded corner: stop before corner, Bezier through, continue on next seg
+      const nextSeg = segs[i + 1];
+      const r = Math.min(R, seg.len / 2, nextSeg.len / 2);
+      d += ` L ${fmt(corner.x - r * seg.ux)} ${fmt(corner.y - r * seg.uy)}`;
+      d += ` Q ${fmt(corner.x)} ${fmt(corner.y)} ${fmt(corner.x + r * nextSeg.ux)} ${fmt(corner.y + r * nextSeg.uy)}`;
+    } else {
+      d += ` L ${fmt(corner.x)} ${fmt(corner.y)}`;
+    }
+  }
+
+  // Label at midpoint of total polyline length
+  const totalLen = segs.reduce((s, seg) => s + seg.len, 0);
+  const half = totalLen / 2;
+  let acc = 0;
+  let labelX = (sourceX + targetX) / 2;
+  let labelY = (sourceY + targetY) / 2;
+  for (let i = 0; i < segs.length; i++) {
+    if (acc + segs[i].len >= half) {
+      const t = segs[i].len > 0 ? (half - acc) / segs[i].len : 0;
+      labelX = allPts[i].x + t * segs[i].dx;
+      labelY = allPts[i].y + t * segs[i].dy;
+      break;
+    }
+    acc += segs[i].len;
+  }
+
+  return { path: d, labelX, labelY };
+}
 
 function edgePath(props: EdgeProps) {
   const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition } = props;
+  const elkPoints = (props.data as ElkRouteData | undefined)?.elkPoints;
+  if (elkPoints && elkPoints.length > 0) {
+    return buildElkPath(sourceX, sourceY, targetX, targetY, elkPoints);
+  }
   const [path, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
@@ -67,7 +140,7 @@ function EdgeLabel({
 }
 
 // ── Range edge data interface ──────────────────────────────────────────────────
-export interface RangeEdgeData {
+export interface RangeEdgeData extends ElkRouteData {
   slotName: string;
   range: string;
   required: boolean;

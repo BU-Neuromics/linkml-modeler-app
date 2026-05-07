@@ -226,6 +226,8 @@ export interface TypeDefinition {
 
 export interface CanvasLayout {
   nodes: Record<string, NodeLayout>; // keyed by class/enum name
+  /** Per-edge bend points from ELK; ephemeral (not persisted to manifest). */
+  edges?: Record<string, EdgeLayout>;
   viewport: { x: number; y: number; zoom: number };
 }
 
@@ -233,6 +235,11 @@ export interface NodeLayout {
   x: number;
   y: number;
   collapsed?: boolean;
+}
+
+/** Intermediate bend points only (no start/end — ReactFlow provides those). */
+export interface EdgeLayout {
+  bendPoints: Array<{ x: number; y: number }>;
 }
 
 // ─── Factories / helpers ─────────────────────────────────────────────────────

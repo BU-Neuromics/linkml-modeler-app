@@ -59,6 +59,12 @@ export interface DerivedGraph {
   edges: Edge[];
 }
 
+/** Returns `{ elkPoints }` if the layout has bend points for this edge, else `undefined`. */
+function elkData(layout: CanvasLayout, edgeId: string): { elkPoints: Array<{x: number; y: number}> } | undefined {
+  const bends = layout.edges?.[edgeId]?.bendPoints;
+  return bends && bends.length > 0 ? { elkPoints: bends } : undefined;
+}
+
 /**
  * Recursively collects slots from all ancestors of a class (is_a + mixins),
  * returning them as a Map keyed by slot name. First-encountered ancestor wins
@@ -185,24 +191,28 @@ export function deriveGraph(
 
     // ── is_a edge — source=parent so the bottom handle exits toward the child ──
     if (classDef.isA && schema.classes[classDef.isA]) {
+      const edgeId = `isa__${className}__${classDef.isA}`;
       edges.push({
-        id: `isa__${className}__${classDef.isA}`,
+        id: edgeId,
         type: 'is_a' as LinkMLEdgeType,
         source: classDef.isA,
         target: className,
         animated: false,
+        data: elkData(layout, edgeId),
       });
     }
 
     // ── mixin edges — source=mixin parent for same handle direction ────────
     for (const mixinName of classDef.mixins) {
       if (schema.classes[mixinName]) {
+        const edgeId = `mixin__${className}__${mixinName}`;
         edges.push({
-          id: `mixin__${className}__${mixinName}`,
+          id: edgeId,
           type: 'mixin' as LinkMLEdgeType,
           source: mixinName,
           target: className,
           animated: false,
+          data: elkData(layout, edgeId),
         });
       }
     }
@@ -211,12 +221,14 @@ export function deriveGraph(
     if (classDef.unionOf) {
       for (const memberName of classDef.unionOf) {
         if (schema.classes[memberName]) {
+          const edgeId = `union__${className}__${memberName}`;
           edges.push({
-            id: `union__${className}__${memberName}`,
+            id: edgeId,
             type: 'union_of' as LinkMLEdgeType,
             source: className,
             target: memberName,
             animated: false,
+            data: elkData(layout, edgeId),
           });
         }
       }
@@ -229,8 +241,9 @@ export function deriveGraph(
       const rangeIsClass = slot.range in schema.classes;
       const rangeIsEnum = slot.range in schema.enums;
       if (rangeIsClass || rangeIsEnum) {
+        const edgeId = `range__${className}__${slotName}__${slot.range}`;
         edges.push({
-          id: `range__${className}__${slotName}__${slot.range}`,
+          id: edgeId,
           type: 'range' as LinkMLEdgeType,
           source: className,
           target: slot.range,
@@ -241,6 +254,7 @@ export function deriveGraph(
             required: slot.required ?? false,
             multivalued: slot.multivalued ?? false,
             identifier: slot.identifier ?? false,
+            ...elkData(layout, edgeId),
           },
           animated: false,
         });
@@ -273,6 +287,7 @@ export function deriveGraph(
             required: effectiveSlot.required ?? false,
             multivalued: effectiveSlot.multivalued ?? false,
             identifier: effectiveSlot.identifier ?? false,
+            ...elkData(layout, edgeId),
           },
           animated: false,
         });
@@ -440,12 +455,10 @@ export function deriveGraph(
       if (!slot.range) continue;
       if (slot.range === className) continue; // self-reference: no edge
       const ghostId = `ghost__${slot.range}`;
-      if (
-        allGhostIds.has(ghostId) &&
-        !edges.find((e) => e.id === `range__${className}__${slotName}__${slot.range}`)
-      ) {
+      const edgeId = `range__${className}__${slotName}__${slot.range}`;
+      if (allGhostIds.has(ghostId) && !edges.find((e) => e.id === edgeId)) {
         edges.push({
-          id: `range__${className}__${slotName}__${slot.range}`,
+          id: edgeId,
           type: 'range' as LinkMLEdgeType,
           source: className,
           target: ghostId,
@@ -456,6 +469,7 @@ export function deriveGraph(
             required: slot.required ?? false,
             multivalued: slot.multivalued ?? false,
             identifier: slot.identifier ?? false,
+            ...elkData(layout, edgeId),
           },
           animated: false,
         });
@@ -486,6 +500,7 @@ export function deriveGraph(
             required: effectiveSlot.required ?? false,
             multivalued: effectiveSlot.multivalued ?? false,
             identifier: effectiveSlot.identifier ?? false,
+            ...elkData(layout, edgeId),
           },
           animated: false,
         });
@@ -496,12 +511,14 @@ export function deriveGraph(
     if (classDef.isA) {
       const ghostId = `ghost__${classDef.isA}`;
       if (allGhostIds.has(ghostId)) {
+        const edgeId = `isa__${className}__${classDef.isA}`;
         edges.push({
-          id: `isa__${className}__${classDef.isA}`,
+          id: edgeId,
           type: 'is_a' as LinkMLEdgeType,
           source: ghostId,
           target: className,
           animated: false,
+          data: elkData(layout, edgeId),
         });
       }
     }
@@ -510,12 +527,14 @@ export function deriveGraph(
     for (const mixinName of classDef.mixins) {
       const ghostId = `ghost__${mixinName}`;
       if (allGhostIds.has(ghostId)) {
+        const edgeId = `mixin__${className}__${mixinName}`;
         edges.push({
-          id: `mixin__${className}__${mixinName}`,
+          id: edgeId,
           type: 'mixin' as LinkMLEdgeType,
           source: ghostId,
           target: className,
           animated: false,
+          data: elkData(layout, edgeId),
         });
       }
     }
@@ -525,12 +544,14 @@ export function deriveGraph(
       for (const memberName of classDef.unionOf) {
         const ghostId = `ghost__${memberName}`;
         if (allGhostIds.has(ghostId)) {
+          const edgeId = `union__${className}__${memberName}`;
           edges.push({
-            id: `union__${className}__${memberName}`,
+            id: edgeId,
             type: 'union_of' as LinkMLEdgeType,
             source: className,
             target: ghostId,
             animated: false,
+            data: elkData(layout, edgeId),
           });
         }
       }

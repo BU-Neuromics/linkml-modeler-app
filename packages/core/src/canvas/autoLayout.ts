@@ -10,7 +10,7 @@
  */
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { ElkNode, ElkExtendedEdge } from 'elkjs/lib/elk-api.js';
-import type { LinkMLSchema, CanvasLayout } from '../model/index.js';
+import type { LinkMLSchema, CanvasLayout, EdgeLayout } from '../model/index.js';
 import type { ImportedEntity } from '../io/importResolver.js';
 
 // Node dimensions used for layout calculations
@@ -174,6 +174,8 @@ export async function runAutoLayout(
       'elk.spacing.nodeNode': String(options.nodeNodeSpacing),
       'elk.layered.spacing.nodeNodeBetweenLayers': String(options.layerSpacing),
       'elk.edgeRouting': 'ORTHOGONAL',
+      // Route cross-hierarchy edges (to ghost nodes inside compound groups) in root frame
+      'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
     },
     children: elkNodes,
     edges: elkEdges,
@@ -203,11 +205,12 @@ function addEdge(
 
 /**
  * Recursively extract absolute positions from ELK result, including children
- * of compound (group) nodes.
+ * of compound (group) nodes. Also captures per-edge bend points.
  */
 function elkResultToLayout(elkNode: ElkNode): CanvasLayout {
   const layout: CanvasLayout = {
     nodes: {},
+    edges: {},
     viewport: { x: 0, y: 0, zoom: 1 },
   };
 
@@ -227,6 +230,18 @@ function elkResultToLayout(elkNode: ElkNode): CanvasLayout {
   }
 
   extractPositions(elkNode, 0, 0, false);
+
+  // Extract bend points from routed edges (only intermediate points; start/end
+  // are discarded in favour of ReactFlow's live handle coordinates).
+  for (const edge of elkNode.edges ?? []) {
+    const section = (edge as ElkExtendedEdge & { sections?: Array<{ bendPoints?: Array<{ x: number; y: number }> }> }).sections?.[0];
+    const bendPoints = section?.bendPoints;
+    if (bendPoints && bendPoints.length > 0) {
+      const edgeLayout: EdgeLayout = { bendPoints };
+      layout.edges![edge.id] = edgeLayout;
+    }
+  }
+
   return layout;
 }
 
