@@ -66,6 +66,36 @@ function elkData(layout: CanvasLayout, edgeId: string): { elkPoints: Array<{x: n
 }
 
 /**
+ * Chooses east or west based on saved layout positions.
+ * Falls back to 'east' when no prior layout exists — first-run ELK typically
+ * places sources to the left of targets in the layered algorithm.
+ */
+function rangeEdgeSide(
+  layout: CanvasLayout,
+  sourceId: string,
+  targetId: string
+): 'east' | 'west' {
+  const src = layout.nodes[sourceId];
+  const tgt = layout.nodes[targetId];
+  if (!src || !tgt) return 'east';
+  return tgt.x >= src.x ? 'east' : 'west';
+}
+
+/** Returns the handle IDs for a range edge given source/target nodes and collapse state. */
+function rangeHandles(
+  layout: CanvasLayout,
+  sourceId: string,
+  targetId: string,
+  slotName: string,
+  sourceCollapsed: boolean
+): { sourceHandle: string; targetHandle: string } {
+  const side = rangeEdgeSide(layout, sourceId, targetId);
+  const sourceHandle = sourceCollapsed ? `side-${side}` : `slot-${side}-${slotName}`;
+  const targetHandle = side === 'east' ? 'side-west' : 'side-east';
+  return { sourceHandle, targetHandle };
+}
+
+/**
  * Recursively collects slots from all ancestors of a class (is_a + mixins),
  * returning them as a Map keyed by slot name. First-encountered ancestor wins
  * when the same slot appears in multiple ancestors. Does NOT include the class's
@@ -242,19 +272,22 @@ export function deriveGraph(
       const rangeIsEnum = slot.range in schema.enums;
       if (rangeIsClass || rangeIsEnum) {
         const edgeId = `range__${className}__${slotName}__${slot.range}`;
+        const handles = rangeHandles(layout, className, slot.range, slotName, isCollapsed);
         edges.push({
           id: edgeId,
           type: 'range' as LinkMLEdgeType,
           source: className,
           target: slot.range,
           label: slotName,
+          ...handles,
           data: {
             slotName,
             range: slot.range,
             required: slot.required ?? false,
             multivalued: slot.multivalued ?? false,
             identifier: slot.identifier ?? false,
-            ...elkData(layout, edgeId),
+            // Range edges use smooth-step routing from slot handles; ELK bend points
+            // (computed for node-center routing) would produce incorrect paths here.
           },
           animated: false,
         });
@@ -275,19 +308,20 @@ export function deriveGraph(
       const rangeIsEnum = effectiveRange in schema.enums;
       if (rangeIsClass || rangeIsEnum) {
         const effectiveSlot = usage ? { ...schemaSlot, ...usage } : schemaSlot;
+        const handles = rangeHandles(layout, className, effectiveRange, slotName, isCollapsed);
         edges.push({
           id: edgeId,
           type: 'range' as LinkMLEdgeType,
           source: className,
           target: effectiveRange,
           label: slotName,
+          ...handles,
           data: {
             slotName,
             range: effectiveRange,
             required: effectiveSlot.required ?? false,
             multivalued: effectiveSlot.multivalued ?? false,
             identifier: effectiveSlot.identifier ?? false,
-            ...elkData(layout, edgeId),
           },
           animated: false,
         });
@@ -450,6 +484,8 @@ export function deriveGraph(
 
   // ── Range / is_a / mixin edges to ghost nodes ──────────────────────────────
   for (const [className, classDef] of Object.entries(schema.classes)) {
+    const srcCollapsed = collapsed[className] ?? false;
+
     // Range edges (attributes)
     for (const [slotName, slot] of Object.entries(classDef.attributes)) {
       if (!slot.range) continue;
@@ -457,19 +493,20 @@ export function deriveGraph(
       const ghostId = `ghost__${slot.range}`;
       const edgeId = `range__${className}__${slotName}__${slot.range}`;
       if (allGhostIds.has(ghostId) && !edges.find((e) => e.id === edgeId)) {
+        const handles = rangeHandles(layout, className, ghostId, slotName, srcCollapsed);
         edges.push({
           id: edgeId,
           type: 'range' as LinkMLEdgeType,
           source: className,
           target: ghostId,
           label: slotName,
+          ...handles,
           data: {
             slotName,
             range: slot.range,
             required: slot.required ?? false,
             multivalued: slot.multivalued ?? false,
             identifier: slot.identifier ?? false,
-            ...elkData(layout, edgeId),
           },
           animated: false,
         });
@@ -488,19 +525,20 @@ export function deriveGraph(
       const edgeId = `range__${className}__${slotName}__${effectiveRange}`;
       if (allGhostIds.has(ghostId) && !edges.find((e) => e.id === edgeId)) {
         const effectiveSlot = usage ? { ...schemaSlot, ...usage } : schemaSlot;
+        const handles = rangeHandles(layout, className, ghostId, slotName, srcCollapsed);
         edges.push({
           id: edgeId,
           type: 'range' as LinkMLEdgeType,
           source: className,
           target: ghostId,
           label: slotName,
+          ...handles,
           data: {
             slotName,
             range: effectiveRange,
             required: effectiveSlot.required ?? false,
             multivalued: effectiveSlot.multivalued ?? false,
             identifier: effectiveSlot.identifier ?? false,
-            ...elkData(layout, edgeId),
           },
           animated: false,
         });
@@ -555,6 +593,26 @@ export function deriveGraph(
           });
         }
       }
+    }
+  }
+
+  // ── Parallel edge annotation ────────────────────────────────────────────────
+  // Group non-range edges that share the same source+target and fan them out.
+  // Range edges are excluded: each already leaves from a distinct slot handle,
+  // so perpendicular offset would misalign them from their anchor points.
+  const parallelGroups = new Map<string, Edge[]>();
+  for (const edge of edges) {
+    if (edge.type === 'range') continue;
+    const key = `${edge.source}||${edge.target}`;
+    const group = parallelGroups.get(key) ?? [];
+    group.push(edge);
+    parallelGroups.set(key, group);
+  }
+  for (const group of parallelGroups.values()) {
+    if (group.length > 1) {
+      group.forEach((edge, i) => {
+        edge.data = { ...(edge.data ?? {}), parallelIndex: i, parallelCount: group.length };
+      });
     }
   }
 

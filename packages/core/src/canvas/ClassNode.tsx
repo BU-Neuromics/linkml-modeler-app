@@ -3,6 +3,7 @@ import { Handle, Position, NodeProps } from 'reactflow';
 import type { CanvasNodeData } from '../store/slices/canvasSlice.js';
 import type { ClassDefinition, SlotDefinition } from '../model/index.js';
 import { ArrowUp, Hexagon, Plus } from '../ui/icons/index.js';
+import { classSlotMidY } from './nodeGeometry.js';
 
 export interface ResolvedSlot {
   slot: SlotDefinition;
@@ -95,6 +96,9 @@ function ClassNode({ data, selected }: NodeProps<ClassNodeData>) {
   const visibleSlots = collapsed ? [] : resolvedSlots.slice(0, SLOT_LIMIT_EXPANDED);
   const hiddenCount = collapsed ? 0 : Math.max(0, resolvedSlots.length - SLOT_LIMIT_EXPANDED);
 
+  // Whether the is_a row is rendered (affects slot y-offsets for handle placement).
+  const hasIsA = !collapsed && !!classDef.isA;
+
   return (
     <div
       style={{
@@ -103,11 +107,27 @@ function ClassNode({ data, selected }: NodeProps<ClassNodeData>) {
         outline: selected ? '2px solid var(--color-accent-hover)' : ghost ? '1px dashed var(--color-border-default)' : '1px solid var(--color-border-default)',
       }}
     >
-      {/* Target handle (top) — for edges pointing into this node */}
+      {/* Target handle (top) — for is_a / mixin / union_of edges pointing into this node */}
       <Handle
         type="target"
         position={Position.Top}
         style={styles.handle}
+      />
+
+      {/* Generic side handles — always present.
+          • As source: used by range edges when this node is collapsed.
+          • As target: used by range edges arriving at this node from the opposite side. */}
+      <Handle
+        type="source"
+        id="side-east"
+        position={Position.Right}
+        style={styles.sideHandle}
+      />
+      <Handle
+        type="source"
+        id="side-west"
+        position={Position.Left}
+        style={styles.sideHandle}
       />
 
       {/* Header */}
@@ -142,7 +162,31 @@ function ClassNode({ data, selected }: NodeProps<ClassNodeData>) {
         </div>
       )}
 
-      {/* Source handle (bottom) — for outgoing range/mixin edges */}
+      {/* Per-slot side handles for range edges — only when expanded.
+          Added for each own (non-inherited) slot that declares a range.
+          Both east and west handles exist; deriveGraph picks the side facing the target. */}
+      {!collapsed && visibleSlots.map((r, i) => {
+        if (r.inherited || !r.slot.range) return null;
+        const y = classSlotMidY(i, hasIsA);
+        return (
+          <React.Fragment key={r.slot.name}>
+            <Handle
+              type="source"
+              id={`slot-east-${r.slot.name}`}
+              position={Position.Right}
+              style={{ ...styles.slotHandle, top: y }}
+            />
+            <Handle
+              type="source"
+              id={`slot-west-${r.slot.name}`}
+              position={Position.Left}
+              style={{ ...styles.slotHandle, top: y }}
+            />
+          </React.Fragment>
+        );
+      })}
+
+      {/* Source handle (bottom) — for outgoing is_a / mixin edges when this node is parent */}
       <Handle
         type="source"
         position={Position.Bottom}
@@ -173,6 +217,24 @@ const styles: Record<string, React.CSSProperties> = {
     width: 8,
     height: 8,
     border: '2px solid var(--color-border-subtle)',
+  },
+  /** Subtle dot on the side of the node; always rendered for range-edge routing. */
+  sideHandle: {
+    background: 'var(--color-fg-muted)',
+    width: 5,
+    height: 5,
+    border: '1px solid var(--color-border-subtle)',
+    opacity: 0.5,
+  },
+  /** Tiny dot at each slot row's right/left edge — marks a specific connection point. */
+  slotHandle: {
+    background: 'var(--color-state-success)',
+    width: 5,
+    height: 5,
+    border: '1px solid var(--color-border-subtle)',
+    opacity: 0.6,
+    // `top` is set inline per-slot via classSlotMidY; `transform: translateY(-50%)` from
+    // ReactFlow's class centers the dot on that y coordinate.
   },
   header: {
     display: 'flex',

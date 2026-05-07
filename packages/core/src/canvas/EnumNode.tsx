@@ -30,6 +30,20 @@ function EnumNode({ data, selected }: NodeProps<EnumNodeData>) {
       {/* Enum nodes only receive edges (range targets) */}
       <Handle type="target" position={Position.Top} style={styles.handle} />
 
+      {/* Generic side handles — used as targets for range edges arriving from ClassNodes. */}
+      <Handle
+        type="source"
+        id="side-east"
+        position={Position.Right}
+        style={styles.sideHandle}
+      />
+      <Handle
+        type="source"
+        id="side-west"
+        position={Position.Left}
+        style={styles.sideHandle}
+      />
+
       {/* Header */}
       <div style={{ ...styles.header, ...(ghost ? styles.ghostHeader : {}) }}>
         <span style={styles.nodeIcon}><Diamond size={14} /></span>
@@ -87,6 +101,13 @@ const styles: Record<string, React.CSSProperties> = {
     width: 8,
     height: 8,
     border: '2px solid var(--color-border-subtle)',
+  },
+  sideHandle: {
+    background: 'var(--color-fg-muted)',
+    width: 5,
+    height: 5,
+    border: '1px solid var(--color-border-subtle)',
+    opacity: 0.5,
   },
   header: {
     display: 'flex',
