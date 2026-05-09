@@ -534,4 +534,34 @@ describe('resolveImports', () => {
     expect(filePaths).toContain('depth1.yaml');
     expect(filePaths).not.toContain('depth2.yaml');
   });
+
+  it('resolves relative imports from a URL-sourced schema via sourceUrl', async () => {
+    // Schema was fetched from a URL but stored with a clean local filename.
+    // sourceUrl must guide import resolution so ./common becomes the correct URL.
+    const commonYaml = 'id: https://example.org/schemas/common\nname: common\n';
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === 'https://example.org/schemas/common.yaml') {
+        return { ok: true, text: async () => commonYaml };
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = fetchMock as never;
+
+    try {
+      const main = makeSchemaFile('main.yaml', {
+        sourceUrl: 'https://example.org/schemas/main.yaml',
+        schema: {
+          ...emptySchema('main', 'https://example.org/main', 'main'),
+          imports: ['./common'],
+        },
+      });
+      const platform = makePlatform({});
+      const result = await resolveImports([main], platform as never, '');
+      expect(result.length).toBe(1);
+      expect(result[0].filePath).toBe('https://example.org/schemas/common.yaml');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
 });
