@@ -36,6 +36,7 @@ export function SplashPage({ demoUrl, onLoadDemo }: { demoUrl?: string; onLoadDe
   const setGitAvailable = useAppStore((s) => s.setGitAvailable);
   const pushToast = useAppStore((s) => s.pushToast);
   const setCloneDialogOpen = useAppStore((s) => s.setCloneDialogOpen);
+  const setOpenFromUrlDialogOpen = useAppStore((s) => s.setOpenFromUrlDialogOpen);
   const setHiddenSchemaIds = useAppStore((s) => s.setHiddenSchemaIds);
   const { theme, setTheme } = useTheme();
 
@@ -162,8 +163,11 @@ export function SplashPage({ demoUrl, onLoadDemo }: { demoUrl?: string; onLoadDe
               <Button variant="primary" size="lg" icon={<FolderOpen size={18} />} onClick={handleOpenFolder}>
                 Open Local Folder
               </Button>
-              <Button variant="primary" size="lg" icon={<Link2 size={18} />} onClick={() => setCloneDialogOpen(true)}>
-                Clone from URL
+              <Button variant="primary" size="lg" icon={<Link2 size={18} />} onClick={() => setOpenFromUrlDialogOpen(true)}>
+                Open Schema from URL…
+              </Button>
+              <Button variant="primary" size="lg" icon={<GitBranch size={18} />} onClick={() => setCloneDialogOpen(true)}>
+                Clone Git Repository…
               </Button>
               {onLoadDemo && (
                 <Button variant="secondary" size="lg" icon={<PlayCircle size={18} />} onClick={handleLoadDemo}>

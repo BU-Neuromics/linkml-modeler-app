@@ -50,6 +50,7 @@ import {
   SplashPage,
   SchemaCanvas,
   CloneDialog,
+  OpenSchemaFromUrlDialog,
   ImportSchemaDialog,
   NewSchemaDialog,
   createNewProject,
@@ -308,6 +309,8 @@ function App() {
   const setNewSchemaDialogOpen = useAppStore((s) => s.setNewSchemaDialogOpen);
   const switchProjectDialogOpen = useAppStore((s) => s.switchProjectDialogOpen);
   const setSwitchProjectDialogOpen = useAppStore((s) => s.setSwitchProjectDialogOpen);
+  const openFromUrlDialogOpen = useAppStore((s) => s.openFromUrlDialogOpen);
+  const setOpenFromUrlDialogOpen = useAppStore((s) => s.setOpenFromUrlDialogOpen);
   const syncStatus = useAppStore((s) => s.syncStatus);
 
   // Enable "Switch Project" when 2+ projects are registered
@@ -445,6 +448,9 @@ function App() {
         {cloneDialogOpen && (
           <CloneDialog onClose={() => setCloneDialogOpen(false)} />
         )}
+        {openFromUrlDialogOpen && (
+          <OpenSchemaFromUrlDialog onClose={() => setOpenFromUrlDialogOpen(false)} />
+        )}
         <ToastList />
       </div>
     );
@@ -467,7 +473,7 @@ function App() {
             onOpenProject={handleOpenProject}
             onSave={saveProject}
             onSaveAs={saveProject}
-            onOpenFromUrl={() => setCloneDialogOpen(true)}
+            onOpenFromUrl={() => setOpenFromUrlDialogOpen(true)}
             onSwitchProject={registeredProjectCount >= 2 ? () => setSwitchProjectDialogOpen(true) : undefined}
             onNewSchema={() => setNewSchemaDialogOpen(true)}
             onImportSchema={() => setImportDialogOpen(true)}
@@ -550,9 +556,14 @@ function App() {
         <SchemaSettingsDialog onClose={() => setSchemaSettingsOpen(false)} />
       )}
 
-      {/* Clone from URL dialog */}
+      {/* Clone git repository dialog */}
       {cloneDialogOpen && (
         <CloneDialog onClose={() => setCloneDialogOpen(false)} />
+      )}
+
+      {/* Open schema from URL dialog */}
+      {openFromUrlDialogOpen && (
+        <OpenSchemaFromUrlDialog onClose={() => setOpenFromUrlDialogOpen(false)} />
       )}
 
       {/* Import schema dialog */}

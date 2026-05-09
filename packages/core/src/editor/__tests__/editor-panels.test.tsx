@@ -123,7 +123,8 @@ describe('SplashPage', () => {
     expect(screen.getByText('LinkML Visual Schema Editor')).toBeInTheDocument();
     expect(screen.getByText('New Empty Project')).toBeInTheDocument();
     expect(screen.getByText('Open Local Folder')).toBeInTheDocument();
-    expect(screen.getByText('Clone from URL')).toBeInTheDocument();
+    expect(screen.getByText('Open Schema from URL…')).toBeInTheDocument();
+    expect(screen.getByText('Clone Git Repository…')).toBeInTheDocument();
   });
 
   it('clicking New Empty Project sets an active project', () => {
@@ -132,9 +133,15 @@ describe('SplashPage', () => {
     expect(useAppStore.getState().activeProject).not.toBeNull();
   });
 
-  it('clicking Clone from URL opens clone dialog', () => {
+  it('clicking Open Schema from URL opens URL dialog', () => {
     renderSplash();
-    fireEvent.click(screen.getByText('Clone from URL'));
+    fireEvent.click(screen.getByText('Open Schema from URL…'));
+    expect(useAppStore.getState().openFromUrlDialogOpen).toBe(true);
+  });
+
+  it('clicking Clone Git Repository opens clone dialog', () => {
+    renderSplash();
+    fireEvent.click(screen.getByText('Clone Git Repository…'));
     expect(useAppStore.getState().cloneDialogOpen).toBe(true);
   });
 });
