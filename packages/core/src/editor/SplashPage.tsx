@@ -39,12 +39,8 @@ export function SplashPage({ demoUrl, onLoadDemo }: { demoUrl?: string; onLoadDe
   const setHiddenSchemaIds = useAppStore((s) => s.setHiddenSchemaIds);
   const { theme, setTheme } = useTheme();
 
-  const [recentProjects, setRecentProjects] = React.useState<RecentProject[]>([]);
+  const [recentProjects, setRecentProjects] = React.useState<RecentProject[]>(() => getRecentProjects());
   const [isLoading, setIsLoading] = React.useState(false);
-
-  React.useEffect(() => {
-    setRecentProjects(getRecentProjects());
-  }, []);
 
   const handleNewProject = () => {
     const project = createNewProject('Untitled Schema');

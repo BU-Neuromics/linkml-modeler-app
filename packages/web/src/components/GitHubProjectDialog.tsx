@@ -112,7 +112,7 @@ export function GitHubProjectDialog({ onClose, onProjectOpened }: GitHubProjectD
 
   useEffect(() => {
     if (activeProject?.name) {
-      setConvertName(slugify(activeProject.name));
+      void Promise.resolve(slugify(activeProject.name)).then(setConvertName);
     }
   }, [activeProject?.name]);
 
@@ -181,18 +181,21 @@ export function GitHubProjectDialog({ onClose, onProjectOpened }: GitHubProjectD
   }, [cloud, cloneUrl, cloneSchemaPath, clonePersistLayout, pushToast, onProjectOpened, onClose]);
 
   useEffect(() => {
-    if (!cloneUrl || validateRepoUrl(cloneUrl)) {
-      setCloneConfigLocked(false);
-      return;
-    }
-    const existing = cloud.listProjects?.().find((p) => p.repoUrl === cloneUrl.trim());
-    if (existing) {
-      setCloneSchemaPath(existing.schemaPath);
-      setClonePersistLayout(existing.persistLayout);
-      setCloneConfigLocked(true);
-    } else {
-      setCloneConfigLocked(false);
-    }
+    const existing =
+      cloneUrl && !validateRepoUrl(cloneUrl)
+        ? cloud.listProjects?.().find((p) => p.repoUrl === cloneUrl.trim())
+        : undefined;
+    void Promise.resolve().then(() => {
+      if (!cloneUrl || validateRepoUrl(cloneUrl)) {
+        setCloneConfigLocked(false);
+      } else if (existing) {
+        setCloneSchemaPath(existing.schemaPath);
+        setClonePersistLayout(existing.persistLayout);
+        setCloneConfigLocked(true);
+      } else {
+        setCloneConfigLocked(false);
+      }
+    });
   }, [cloneUrl, cloud]);
 
   const handleConvertSubmit = useCallback(async (e: React.FormEvent) => {

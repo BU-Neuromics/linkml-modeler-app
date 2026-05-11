@@ -5,7 +5,7 @@
  * "Jump" button navigates to the offending entity in the Properties panel.
  * Save is never blocked — this panel is informational/advisory.
  */
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '../store/index.js';
 import { collectImportedEntities } from '../io/importResolver.js';
 import type { ValidationIssue, IssueSeverity } from '../validation/index.js';
@@ -94,9 +94,12 @@ function SummaryBar({
   const warnCount = issues.filter((i) => i.severity === 'warning').length;
   const infoCount = issues.filter((i) => i.severity === 'info').length;
 
-  const timeAgo = lastValidatedAt
-    ? Math.round((Date.now() - lastValidatedAt) / 1000)
-    : null;
+  const [timeAgo, setTimeAgo] = useState<number | null>(null);
+  useEffect(() => {
+    void Promise.resolve().then(() =>
+      setTimeAgo(lastValidatedAt !== null ? Math.round((Date.now() - lastValidatedAt) / 1000) : null)
+    );
+  }, [lastValidatedAt]);
 
   return (
     <div style={styles.summaryBar}>

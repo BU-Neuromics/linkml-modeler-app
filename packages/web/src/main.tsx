@@ -148,7 +148,7 @@ function RootApp({
 
   // Electron resume: activate CloudPlatform if keytar had a stored token
   React.useEffect(() => {
-    if (initialToken) void switchToCloud(initialToken);
+    if (initialToken) void Promise.resolve(initialToken).then(switchToCloud);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -314,9 +314,11 @@ function App() {
   const [registeredProjectCount, setRegisteredProjectCount] = React.useState(() =>
     new WebProjectRegistry().getAll().length
   );
+  // Refresh count when the dialog opens or closes so the menu item stays in sync
   React.useEffect(() => {
-    // Refresh count when the dialog opens or closes so the menu item stays in sync
-    setRegisteredProjectCount(new WebProjectRegistry().getAll().length);
+    void Promise.resolve().then(() =>
+      setRegisteredProjectCount(new WebProjectRegistry().getAll().length)
+    );
   }, [switchProjectDialogOpen]);
   const [isSaving, setIsSaving] = React.useState(false);
 
