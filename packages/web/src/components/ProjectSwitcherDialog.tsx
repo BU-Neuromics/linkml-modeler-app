@@ -19,13 +19,11 @@ export function ProjectSwitcherDialog({ onClose }: ProjectSwitcherDialogProps) {
   const pushToast = useAppStore((s) => s.pushToast);
   const setHiddenSchemaIds = useAppStore((s) => s.setHiddenSchemaIds);
 
-  const [projects, setProjects] = React.useState<ProjectRegistryEntry[]>([]);
+  const [projects, setProjects] = React.useState<ProjectRegistryEntry[]>(() =>
+    registry.getAll().sort((a, b) => b.lastOpenedAt.localeCompare(a.lastOpenedAt))
+  );
   const [loading, setLoading] = React.useState(false);
   const [removingUrl, setRemovingUrl] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    setProjects(registry.getAll().sort((a, b) => b.lastOpenedAt.localeCompare(a.lastOpenedAt)));
-  }, []);
 
   const handleSelect = async (entry: ProjectRegistryEntry) => {
     if (activeProject?.rootPath === entry.localPath) {
