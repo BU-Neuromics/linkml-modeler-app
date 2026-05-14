@@ -56,7 +56,7 @@ function DropdownMenu({
 
   React.useEffect(() => {
     if (!isOpen) {
-      setHoveredIndex(-1);
+      void Promise.resolve().then(() => setHoveredIndex(-1));
       return;
     }
     function handleClickOutside(e: MouseEvent) {

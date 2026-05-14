@@ -8,7 +8,7 @@
  * - Node double-click → collapse/expand
  * - Delete key → delete selected nodes with confirmation
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -288,10 +288,14 @@ function SchemaCanvasInner() {
 
   // Refs for manifest writing — always up to date, no closure staleness
   const localLayoutRef = useRef(localLayout);
-  localLayoutRef.current = localLayout;
   const manifestWriteStateRef = useRef({ activeProject, activeSchemaId, hiddenSchemaIds, platform });
-  manifestWriteStateRef.current = { activeProject, activeSchemaId, hiddenSchemaIds, platform };
   const manifestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useLayoutEffect(() => {
+    localLayoutRef.current = localLayout;
+  }, [localLayout]);
+  useLayoutEffect(() => {
+    manifestWriteStateRef.current = { activeProject, activeSchemaId, hiddenSchemaIds, platform };
+  }, [activeProject, activeSchemaId, hiddenSchemaIds, platform]);
 
   // Save layout to store when active schema changes (before the new schema loads)
   const prevActiveSchemaIdRef = useRef<string | null>(null);
@@ -352,16 +356,15 @@ function SchemaCanvasInner() {
   useEffect(() => {
     if (!activeSchemaFile || layoutRanRef.current) return;
     const hasLayoutData = Object.keys(activeSchemaFile.canvasLayout.nodes).length > 0;
-    if (hasLayoutData) {
-      setLocalLayout(activeSchemaFile.canvasLayout);
-      layoutRanRef.current = true;
-      return;
-    }
     layoutRanRef.current = true;
-    runAutoLayout(activeSchemaFile.schema, {}, ghostEntities).then((layout) => {
-      setLocalLayout(layout);
-      setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 100);
-    });
+    if (hasLayoutData) {
+      void Promise.resolve(activeSchemaFile.canvasLayout).then(setLocalLayout);
+    } else {
+      void runAutoLayout(activeSchemaFile.schema, {}, ghostEntities).then((layout) => {
+        setLocalLayout(layout);
+        setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 100);
+      });
+    }
   }, [activeSchemaFile, ghostEntities, fitView]);
 
   useEffect(() => {
@@ -743,7 +746,7 @@ function SchemaCanvasInner() {
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeEntity, clearActiveEntity, fitView, storeNodes, setSelection, activeSchemaId, deleteLabelFromCanvas]);
+  }, [activeEntity, clearActiveEntity, fitView, isReadOnly, storeNodes, setSelection, activeSchemaId, deleteLabelFromCanvas]);
 
   // Memoized adjacency map: nodeId → Set of connected edge IDs (for O(1) highlight lookup)
   const edgeNeighborMap = useMemo(() => {

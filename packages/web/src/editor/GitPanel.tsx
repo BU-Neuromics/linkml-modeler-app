@@ -68,9 +68,11 @@ export function GitPanel({ onSaveBeforeCommit }: { onSaveBeforeCommit?: () => Pr
   // When project changes or git becomes available, sync settings from gitConfig
   // and fall back to reading from the actual git config + stored credentials.
   useEffect(() => {
-    setRemoteUrl(activeProject?.gitConfig?.remoteUrl ?? '');
-    setAuthorName(activeProject?.gitConfig?.userName ?? '');
-    setAuthorEmail(activeProject?.gitConfig?.userEmail ?? '');
+    void Promise.resolve().then(() => {
+      setRemoteUrl(activeProject?.gitConfig?.remoteUrl ?? '');
+      setAuthorName(activeProject?.gitConfig?.userName ?? '');
+      setAuthorEmail(activeProject?.gitConfig?.userEmail ?? '');
+    });
 
     if (!gitAvailable || !activeProject) return;
     const repoP = activeProject.rootPath;
