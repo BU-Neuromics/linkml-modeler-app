@@ -18,11 +18,6 @@ function LabelNode({ data, selected }: NodeProps<LabelNodeData>) {
   const [editText, setEditText] = useState(label.text);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Sync edit buffer when store value changes externally (e.g., undo/redo)
-  useEffect(() => {
-    if (!isEditing) setEditText(label.text);
-  }, [label.text, isEditing]);
-
   const commitEdit = useCallback(() => {
     setIsEditing(false);
     if (editText.trim() !== label.text && activeSchemaId) {

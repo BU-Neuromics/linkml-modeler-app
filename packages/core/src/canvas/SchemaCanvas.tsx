@@ -293,9 +293,6 @@ function SchemaCanvasInner() {
   const manifestWriteStateRef = useRef({ activeProject, activeSchemaId, hiddenSchemaIds, platform });
   const manifestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useLayoutEffect(() => {
-    localLayoutRef.current = localLayout;
-  }, [localLayout]);
-  useLayoutEffect(() => {
     manifestWriteStateRef.current = { activeProject, activeSchemaId, hiddenSchemaIds, platform };
   }, [activeProject, activeSchemaId, hiddenSchemaIds, platform]);
 
@@ -318,12 +315,20 @@ function SchemaCanvasInner() {
 
   const isReadOnly = activeSchemaFile?.isReadOnly ?? false;
 
-  // Sync store labels → localLayout when they change (handles undo/redo + create/edit/delete)
-  // Position-only updates during drag don't touch the store, so this won't overwrite in-progress drags.
+  // Derive labels: store provides text/metadata; labelDragPositions overrides positions during active drags.
+  // No effect needed — useMemo reacts to store and drag state changes automatically.
   const storeLabels = activeSchemaFile?.canvasLayout.labels;
-  useEffect(() => {
-    setLocalLayout((prev) => ({ ...prev, labels: storeLabels ?? [] }));
-  }, [storeLabels]);
+  const [labelDragPositions, setLabelDragPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const effectiveLabels = useMemo(() => {
+    const labels = storeLabels ?? [];
+    if (Object.keys(labelDragPositions).length === 0) return labels;
+    return labels.map((l) => (labelDragPositions[l.id] ? { ...l, ...labelDragPositions[l.id] } : l));
+  }, [storeLabels, labelDragPositions]);
+
+  // Keep localLayoutRef current including effective labels for manifest writes and schema-switch commits.
+  useLayoutEffect(() => {
+    localLayoutRef.current = { ...localLayout, labels: effectiveLabels };
+  }, [localLayout, effectiveLabels]);
 
   // Collect only referenced imported entities (not all entities from imported schemas)
   const ghostEntities = useMemo(
@@ -346,8 +351,8 @@ function SchemaCanvasInner() {
   // Derive graph (with ghost nodes grouped by source schema)
   const { nodes: derivedNodes, edges: derivedEdges } = useMemo(() => {
     if (!activeSchemaFile) return { nodes: [], edges: [] };
-    return deriveGraph(activeSchemaFile.schema, localLayout, {}, ghostEntities, collapsedGroups, allSchemaSlots);
-  }, [activeSchemaFile, ghostEntities, localLayout, collapsedGroups, allSchemaSlots]);
+    return deriveGraph(activeSchemaFile.schema, { ...localLayout, labels: effectiveLabels }, {}, ghostEntities, collapsedGroups, allSchemaSlots);
+  }, [activeSchemaFile, ghostEntities, localLayout, effectiveLabels, collapsedGroups, allSchemaSlots]);
 
   useEffect(() => {
     setNodes(derivedNodes);
@@ -443,20 +448,18 @@ function SchemaCanvasInner() {
         if (change.type === 'position' && change.position) {
           if (change.id.startsWith('label__')) {
             const labelId = change.id.slice('label__'.length);
-            setLocalLayout((prev) => ({
+            setLabelDragPositions((prev) => ({
               ...prev,
-              labels: (prev.labels ?? []).map((l) =>
-                l.id === labelId
-                  ? { ...l, x: change.position!.x, y: change.position!.y }
-                  : l
-              ),
+              [labelId]: { x: change.position!.x, y: change.position!.y },
             }));
-            // Commit final position to store on drag end (creates one undo entry)
+            // Commit final position to store on drag end, then clear local drag state
             if (!change.dragging && activeSchemaId) {
-              const finalPos = localLayoutRef.current.labels?.find((l) => l.id === labelId);
-              if (finalPos) {
-                updateLabelInCanvas(activeSchemaId, labelId, { x: finalPos.x, y: finalPos.y });
-              }
+              updateLabelInCanvas(activeSchemaId, labelId, { x: change.position!.x, y: change.position!.y });
+              setLabelDragPositions((prev) => {
+                const next = { ...prev };
+                delete next[labelId];
+                return next;
+              });
             }
             positionChanged = true;
           } else {
