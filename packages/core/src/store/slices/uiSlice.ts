@@ -11,6 +11,38 @@ export interface Toast {
   durationMs?: number;
 }
 
+const HIDDEN_EDGE_TYPES_KEY = 'linkml-editor-hidden-edge-types';
+const HIGHLIGHT_SETTINGS_KEY = 'linkml-editor-highlight-settings';
+
+function loadHiddenEdgeTypes(): Set<string> {
+  try {
+    const raw = localStorage.getItem(HIDDEN_EDGE_TYPES_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr as string[]);
+    }
+  } catch { /* ignore */ }
+  return new Set();
+}
+
+function loadHighlightSettings(): { onHover: boolean; onSelection: boolean } {
+  try {
+    const raw = localStorage.getItem(HIGHLIGHT_SETTINGS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        onHover: parsed.onHover ?? false,
+        onSelection: parsed.onSelection ?? true,
+      };
+    }
+  } catch { /* ignore */ }
+  return { onHover: false, onSelection: true };
+}
+
+function saveHighlightSettings(onHover: boolean, onSelection: boolean): void {
+  try { localStorage.setItem(HIGHLIGHT_SETTINGS_KEY, JSON.stringify({ onHover, onSelection })); } catch { /* ignore */ }
+}
+
 export interface UISlice {
   // State
   theme: Theme;
@@ -21,6 +53,12 @@ export interface UISlice {
   syncStatus: SyncStatus; // null = not in cloud mode
   /** Schema IDs that are hidden in the project panel / canvas */
   hiddenSchemaIds: Set<string>;
+  /** Edge types that are hidden on the canvas (filtered at render time, not from state) */
+  hiddenEdgeTypes: Set<string>;
+  /** Whether hovering a node highlights its edges and dims all others */
+  highlightOnHover: boolean;
+  /** Whether selecting a node highlights its edges and dims all others (sticky) */
+  highlightOnSelection: boolean;
 
   // Actions
   setTheme(theme: Theme): void;
@@ -33,6 +71,10 @@ export interface UISlice {
   setSchemaVisible(schemaId: string, visible: boolean): void;
   /** Bulk-set hidden IDs, typically called when loading a project manifest. */
   setHiddenSchemaIds(ids: Set<string>): void;
+  /** Toggle visibility for a single edge type. Persisted to localStorage. */
+  toggleEdgeTypeVisibility(type: string): void;
+  setHighlightOnHover(value: boolean): void;
+  setHighlightOnSelection(value: boolean): void;
 }
 
 let toastCounter = 0;
@@ -45,6 +87,9 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   zoom: 1,
   syncStatus: null,
   hiddenSchemaIds: new Set(),
+  hiddenEdgeTypes: loadHiddenEdgeTypes(),
+  highlightOnHover: loadHighlightSettings().onHover,
+  highlightOnSelection: loadHighlightSettings().onSelection,
 
   setTheme(theme) {
     set({ theme });
@@ -86,5 +131,29 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
 
   setHiddenSchemaIds(ids) {
     set({ hiddenSchemaIds: ids });
+  },
+
+  toggleEdgeTypeVisibility(type) {
+    set((state) => {
+      const next = new Set(state.hiddenEdgeTypes);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      try { localStorage.setItem(HIDDEN_EDGE_TYPES_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+      return { hiddenEdgeTypes: next };
+    });
+  },
+
+  setHighlightOnHover(value) {
+    set((state) => {
+      saveHighlightSettings(value, state.highlightOnSelection);
+      return { highlightOnHover: value };
+    });
+  },
+
+  setHighlightOnSelection(value) {
+    set((state) => {
+      saveHighlightSettings(state.highlightOnHover, value);
+      return { highlightOnSelection: value };
+    });
   },
 });

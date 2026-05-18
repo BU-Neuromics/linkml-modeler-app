@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import type { Project, SchemaFile, LinkMLSchema, ClassDefinition, SlotDefinition, EnumDefinition, PermissibleValue, CanvasLayout, GitConfig } from '../../model/index.js';
+import type { Project, SchemaFile, LinkMLSchema, ClassDefinition, SlotDefinition, EnumDefinition, PermissibleValue, CanvasLayout, GitConfig, TextLabel } from '../../model/index.js';
 import { findMissingImport, resolveImportPath } from '../../io/importResolver.js';
 import { addRecentProject } from '../../project/recentProjects.js';
 
@@ -69,6 +69,11 @@ export interface ProjectSlice {
   // ── Canvas layout ────────────────────────────────────────────────────────────
   /** Persist the current canvas layout back into the SchemaFile (called on schema switch / save). */
   updateCanvasLayout(schemaId: string, layout: CanvasLayout): void;
+
+  // ── Text label mutations ─────────────────────────────────────────────────────
+  addLabelToCanvas(schemaId: string, label: TextLabel): void;
+  updateLabelInCanvas(schemaId: string, labelId: string, partial: Partial<TextLabel>): void;
+  deleteLabelFromCanvas(schemaId: string, labelId: string): void;
 
   // ── Import management ────────────────────────────────────────────────────────
   /** Add a local import path to the schema's imports list if not already present. */
@@ -757,6 +762,76 @@ export const createProjectSlice: StateCreator<ProjectSlice, [], [], ProjectSlice
           ...state.activeProject,
           schemas: state.activeProject.schemas.map((s) =>
             s.id === schemaId ? { ...s, canvasLayout: layout } : s
+          ),
+        },
+      };
+    });
+  },
+
+  // ── Text label mutations ─────────────────────────────────────────────────────
+
+  addLabelToCanvas(schemaId, label) {
+    set((state) => {
+      if (!state.activeProject) return state;
+      return {
+        activeProject: {
+          ...state.activeProject,
+          schemas: state.activeProject.schemas.map((s) =>
+            s.id === schemaId
+              ? {
+                  ...s,
+                  canvasLayout: {
+                    ...s.canvasLayout,
+                    labels: [...(s.canvasLayout.labels ?? []), label],
+                  },
+                }
+              : s
+          ),
+        },
+      };
+    });
+  },
+
+  updateLabelInCanvas(schemaId, labelId, partial) {
+    set((state) => {
+      if (!state.activeProject) return state;
+      return {
+        activeProject: {
+          ...state.activeProject,
+          schemas: state.activeProject.schemas.map((s) =>
+            s.id === schemaId
+              ? {
+                  ...s,
+                  canvasLayout: {
+                    ...s.canvasLayout,
+                    labels: (s.canvasLayout.labels ?? []).map((l) =>
+                      l.id === labelId ? { ...l, ...partial } : l
+                    ),
+                  },
+                }
+              : s
+          ),
+        },
+      };
+    });
+  },
+
+  deleteLabelFromCanvas(schemaId, labelId) {
+    set((state) => {
+      if (!state.activeProject) return state;
+      return {
+        activeProject: {
+          ...state.activeProject,
+          schemas: state.activeProject.schemas.map((s) =>
+            s.id === schemaId
+              ? {
+                  ...s,
+                  canvasLayout: {
+                    ...s.canvasLayout,
+                    labels: (s.canvasLayout.labels ?? []).filter((l) => l.id !== labelId),
+                  },
+                }
+              : s
           ),
         },
       };

@@ -10,6 +10,7 @@ import type { CanvasNodeData } from '../store/slices/canvasSlice.js';
 import type { ClassNodeData, ResolvedSlot } from './ClassNode.js';
 import type { EnumNodeData } from './EnumNode.js';
 import type { ImportGroupNodeData } from './ImportGroupNode.js';
+import type { LabelNodeData } from './LabelNode.js';
 import type { LinkMLEdgeType } from './edges.js';
 import type { ImportedEntity } from '../io/importResolver.js';
 
@@ -556,6 +557,41 @@ export function deriveGraph(
         }
       }
     }
+  }
+
+  // ── Parallel edge annotation ────────────────────────────────────────────────
+  // Group edges that share the same source+target (directional) and assign
+  // parallelIndex / parallelCount so the renderer can fan them out visually.
+  const parallelGroups = new Map<string, Edge[]>();
+  for (const edge of edges) {
+    const key = `${edge.source}||${edge.target}`;
+    const group = parallelGroups.get(key) ?? [];
+    group.push(edge);
+    parallelGroups.set(key, group);
+  }
+  for (const group of parallelGroups.values()) {
+    if (group.length > 1) {
+      group.forEach((edge, i) => {
+        edge.data = { ...(edge.data ?? {}), parallelIndex: i, parallelCount: group.length };
+      });
+    }
+  }
+
+  // ── Label nodes (editor-only text annotations) ─────────────────────────────
+  for (const label of layout.labels ?? []) {
+    const labelNodeData: LabelNodeData = {
+      entityId: label.id,
+      entityType: 'label',
+      label,
+    };
+    nodes.push({
+      id: `label__${label.id}`,
+      type: 'labelNode',
+      position: { x: label.x, y: label.y },
+      data: labelNodeData as unknown as CanvasNodeData,
+      draggable: !label.locked,
+      selectable: true,
+    });
   }
 
   return { nodes, edges };

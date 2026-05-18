@@ -31,6 +31,7 @@ import 'reactflow/dist/style.css';
 import ClassNode from './ClassNode.js';
 import EnumNode from './EnumNode.js';
 import ImportGroupNode from './ImportGroupNode.js';
+import LabelNode from './LabelNode.js';
 import { Diamond, Hexagon, Plus } from '../ui/icons/index.js';
 import { edgeTypes, EdgeMarkerDefs } from './edges.js';
 import { deriveGraph } from './deriveGraph.js';
@@ -39,7 +40,7 @@ import { useAppStore } from '../store/index.js';
 import { usePlatform } from '../platform/PlatformContext.js';
 import { collectReferencedImportedEntities } from '../io/importResolver.js';
 import { buildManifestData, writeEditorManifest } from '../io/editorManifest.js';
-import type { CanvasLayout } from '../model/index.js';
+import type { CanvasLayout, TextLabel } from '../model/index.js';
 import { emptyClassDefinition, emptyEnumDefinition } from '../model/index.js';
 
 // ── CSS token reader (for SVG/canvas contexts that require concrete color values) ──
@@ -53,6 +54,7 @@ const nodeTypes = {
   classNode: ClassNode,
   enumNode: EnumNode,
   importGroupNode: ImportGroupNode,
+  labelNode: LabelNode,
 } as unknown as NodeTypes;
 
 // ── Context menu ──────────────────────────────────────────────────────────────
@@ -69,12 +71,14 @@ function CanvasContextMenu({
   onClose,
   onAddClass,
   onAddEnum,
+  onAddLabel,
   onDeleteNode,
 }: {
   menu: ContextMenu;
   onClose: () => void;
   onAddClass: (pos: XYPosition) => void;
   onAddEnum: (pos: XYPosition) => void;
+  onAddLabel: (pos: XYPosition) => void;
   onDeleteNode: (nodeId: string) => void;
 }) {
   return (
@@ -89,7 +93,7 @@ function CanvasContextMenu({
       {menu.nodeId ? (
         <>
           <div style={ctxStyles.item} onClick={() => { onDeleteNode(menu.nodeId!); onClose(); }}>
-            🗑 Delete {menu.nodeType === 'enumNode' ? 'enum' : 'class'}
+            🗑 Delete {menu.nodeType === 'enumNode' ? 'enum' : menu.nodeType === 'labelNode' ? 'label' : 'class'}
           </div>
         </>
       ) : (
@@ -99,6 +103,9 @@ function CanvasContextMenu({
           </div>
           <div style={ctxStyles.item} onClick={() => { onAddEnum(menu.canvasPos); onClose(); }}>
             <Diamond size={13} style={{ marginRight: 6 }} /> Add Enum
+          </div>
+          <div style={ctxStyles.item} onClick={() => { onAddLabel(menu.canvasPos); onClose(); }}>
+            <span style={{ marginRight: 6, fontSize: 13 }}>T</span> Add Label
           </div>
         </>
       )}
@@ -218,6 +225,14 @@ const dlgStyles: Record<string, React.CSSProperties> = {
   },
 };
 
+// ── Edge-type toggle definitions ──────────────────────────────────────────────
+const EDGE_TOGGLE_DEFS = [
+  { type: 'range',    label: 'range',    color: 'var(--color-state-success)' },
+  { type: 'is_a',     label: 'is_a',     color: 'var(--color-accent-hover)' },
+  { type: 'mixin',    label: 'mixin',    color: 'var(--color-edge-mixin)' },
+  { type: 'union_of', label: 'union_of', color: 'var(--color-edge-union)' },
+] as const;
+
 // ── Inner canvas component ────────────────────────────────────────────────────
 function SchemaCanvasInner() {
   const { fitView, screenToFlowPosition } = useReactFlow();
@@ -244,6 +259,12 @@ function SchemaCanvasInner() {
   const setActiveEntity = useAppStore((s) => s.setActiveEntity);
   const clearActiveEntity = useAppStore((s) => s.clearActiveEntity);
   const activeEntity = useAppStore((s) => s.activeEntity);
+  const hiddenEdgeTypes = useAppStore((s) => s.hiddenEdgeTypes);
+  const toggleEdgeTypeVisibility = useAppStore((s) => s.toggleEdgeTypeVisibility);
+  const highlightOnHover = useAppStore((s) => s.highlightOnHover);
+  const highlightOnSelection = useAppStore((s) => s.highlightOnSelection);
+  const setHighlightOnHover = useAppStore((s) => s.setHighlightOnHover);
+  const setHighlightOnSelection = useAppStore((s) => s.setHighlightOnSelection);
 
   // Schema mutations
   const addClass = useAppStore((s) => s.addClass);
@@ -253,20 +274,24 @@ function SchemaCanvasInner() {
   const updateClass = useAppStore((s) => s.updateClass);
   const autoAddImportForRange = useAppStore((s) => s.autoAddImportForRange);
 
+  // Label mutations
+  const addLabelToCanvas = useAppStore((s) => s.addLabelToCanvas);
+  const updateLabelInCanvas = useAppStore((s) => s.updateLabelInCanvas);
+  const deleteLabelFromCanvas = useAppStore((s) => s.deleteLabelFromCanvas);
+
   // Local state
   const [localLayout, setLocalLayout] = useState<CanvasLayout>({
     nodes: {},
     viewport: { x: 0, y: 0, zoom: 1 },
   });
   const layoutRanRef = useRef(false);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [highlightPinnedNodeId, setHighlightPinnedNodeId] = useState<string | null>(null);
 
   // Refs for manifest writing — always up to date, no closure staleness
   const localLayoutRef = useRef(localLayout);
   const manifestWriteStateRef = useRef({ activeProject, activeSchemaId, hiddenSchemaIds, platform });
   const manifestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useLayoutEffect(() => {
-    localLayoutRef.current = localLayout;
-  }, [localLayout]);
   useLayoutEffect(() => {
     manifestWriteStateRef.current = { activeProject, activeSchemaId, hiddenSchemaIds, platform };
   }, [activeProject, activeSchemaId, hiddenSchemaIds, platform]);
@@ -290,6 +315,21 @@ function SchemaCanvasInner() {
 
   const isReadOnly = activeSchemaFile?.isReadOnly ?? false;
 
+  // Derive labels: store provides text/metadata; labelDragPositions overrides positions during active drags.
+  // No effect needed — useMemo reacts to store and drag state changes automatically.
+  const storeLabels = activeSchemaFile?.canvasLayout.labels;
+  const [labelDragPositions, setLabelDragPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const effectiveLabels = useMemo(() => {
+    const labels = storeLabels ?? [];
+    if (Object.keys(labelDragPositions).length === 0) return labels;
+    return labels.map((l) => (labelDragPositions[l.id] ? { ...l, ...labelDragPositions[l.id] } : l));
+  }, [storeLabels, labelDragPositions]);
+
+  // Keep localLayoutRef current including effective labels for manifest writes and schema-switch commits.
+  useLayoutEffect(() => {
+    localLayoutRef.current = { ...localLayout, labels: effectiveLabels };
+  }, [localLayout, effectiveLabels]);
+
   // Collect only referenced imported entities (not all entities from imported schemas)
   const ghostEntities = useMemo(
     () =>
@@ -311,8 +351,8 @@ function SchemaCanvasInner() {
   // Derive graph (with ghost nodes grouped by source schema)
   const { nodes: derivedNodes, edges: derivedEdges } = useMemo(() => {
     if (!activeSchemaFile) return { nodes: [], edges: [] };
-    return deriveGraph(activeSchemaFile.schema, localLayout, {}, ghostEntities, collapsedGroups, allSchemaSlots);
-  }, [activeSchemaFile, ghostEntities, localLayout, collapsedGroups, allSchemaSlots]);
+    return deriveGraph(activeSchemaFile.schema, { ...localLayout, labels: effectiveLabels }, {}, ghostEntities, collapsedGroups, allSchemaSlots);
+  }, [activeSchemaFile, ghostEntities, localLayout, effectiveLabels, collapsedGroups, allSchemaSlots]);
 
   useEffect(() => {
     setNodes(derivedNodes);
@@ -406,22 +446,39 @@ function SchemaCanvasInner() {
       let positionChanged = false;
       for (const change of changes) {
         if (change.type === 'position' && change.position) {
-          setLocalLayout((prev) => ({
-            ...prev,
-            nodes: {
-              ...prev.nodes,
-              [change.id]: { x: change.position!.x, y: change.position!.y },
-            },
-            // Any node drag invalidates all ELK bend points (routing is now stale)
-            edges: undefined,
-          }));
-          updateNodePosition(change.id, change.position.x, change.position.y);
-          positionChanged = true;
+          if (change.id.startsWith('label__')) {
+            const labelId = change.id.slice('label__'.length);
+            setLabelDragPositions((prev) => ({
+              ...prev,
+              [labelId]: { x: change.position!.x, y: change.position!.y },
+            }));
+            // Commit final position to store on drag end, then clear local drag state
+            if (!change.dragging && activeSchemaId) {
+              updateLabelInCanvas(activeSchemaId, labelId, { x: change.position!.x, y: change.position!.y });
+              setLabelDragPositions((prev) => {
+                const next = { ...prev };
+                delete next[labelId];
+                return next;
+              });
+            }
+            positionChanged = true;
+          } else {
+            setLocalLayout((prev) => ({
+              ...prev,
+              nodes: {
+                ...prev.nodes,
+                [change.id]: { x: change.position!.x, y: change.position!.y },
+              },
+              edges: undefined,
+            }));
+            updateNodePosition(change.id, change.position.x, change.position.y);
+            positionChanged = true;
+          }
         }
       }
       if (positionChanged) scheduleManifestWrite();
     },
-    [storeNodes, setNodes, updateNodePosition, scheduleManifestWrite]
+    [storeNodes, setNodes, updateNodePosition, scheduleManifestWrite, activeSchemaId, updateLabelInCanvas]
   );
 
   const onEdgesChange: OnEdgesChange = useCallback(
@@ -438,25 +495,40 @@ function SchemaCanvasInner() {
     [setViewport, scheduleManifestWrite]
   );
 
-  // Double-click → collapse/expand entity nodes (import groups handle their own click)
+  // Node hover → hover highlight
+  const onNodeMouseEnter = useCallback((_: React.MouseEvent, node: Node) => {
+    setHoveredNodeId(node.id);
+  }, []);
+
+  const onNodeMouseLeave = useCallback(() => {
+    setHoveredNodeId(null);
+  }, []);
+
+  // Double-click → collapse/expand entity nodes (import groups and labels handle their own click)
   const onNodeDoubleClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      if (node.type !== 'importGroupNode') {
+      if (node.type !== 'importGroupNode' && node.type !== 'labelNode') {
         toggleNodeCollapsed(node.id);
       }
     },
     [toggleNodeCollapsed]
   );
 
-  // Single click on node → select entity
+  // Single click on node → select entity + pin highlight
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       const { entityType, entityId } = node.data as { entityType: string; entityId: string };
       if (entityType === 'class') {
         setActiveEntity({ type: 'class', className: entityId });
+        setHighlightPinnedNodeId(node.id);
       } else if (entityType === 'enum') {
         setActiveEntity({ type: 'enum', enumName: entityId });
+        setHighlightPinnedNodeId(node.id);
+      } else if (entityType === 'label') {
+        setActiveEntity({ type: 'label', labelId: entityId });
+        setHighlightPinnedNodeId(null);
       }
+      // importGroupNode clicks don't change the active entity
     },
     [setActiveEntity]
   );
@@ -480,10 +552,11 @@ function SchemaCanvasInner() {
     [setSelection]
   );
 
-  // Click on pane → deselect
+  // Click on pane → deselect + clear sticky highlight
   const onPaneClick = useCallback(() => {
     clearActiveEntity();
     setContextMenu(null);
+    setHighlightPinnedNodeId(null);
   }, [clearActiveEntity]);
 
   // Connect (drag handle-to-handle) → create is_a relationship
@@ -570,16 +643,42 @@ function SchemaCanvasInner() {
     [activeSchemaId, activeProject, addEnum, setActiveEntity]
   );
 
+  // Add label at position
+  const handleAddLabel = useCallback(
+    (pos: XYPosition) => {
+      if (!activeSchemaId) return;
+      const id = crypto.randomUUID();
+      const label: TextLabel = {
+        id,
+        text: 'Label',
+        x: pos.x,
+        y: pos.y,
+        fontSize: 14,
+        locked: false,
+      };
+      addLabelToCanvas(activeSchemaId, label);
+      setActiveEntity({ type: 'label', labelId: id });
+    },
+    [activeSchemaId, addLabelToCanvas, setActiveEntity]
+  );
+
   // Delete node from context menu
   const handleDeleteNode = useCallback(
     (nodeId: string) => {
       if (!activeSchemaId) return;
+      // Label nodes have a 'label__' prefix
+      if (nodeId.startsWith('label__')) {
+        const labelId = nodeId.slice('label__'.length);
+        deleteLabelFromCanvas(activeSchemaId, labelId);
+        clearActiveEntity();
+        return;
+      }
       const schema = activeProject?.schemas.find((s) => s.id === activeSchemaId)?.schema;
       if (!schema) return;
       const type = nodeId in schema.classes ? 'class' : 'enum';
       setDeleteTarget({ name: nodeId, type });
     },
-    [activeSchemaId, activeProject]
+    [activeSchemaId, activeProject, deleteLabelFromCanvas, clearActiveEntity]
   );
 
   const confirmDelete = useCallback(() => {
@@ -620,15 +719,19 @@ function SchemaCanvasInner() {
             setDeleteTarget({ name: activeEntity.className, type: 'class' });
           } else if (activeEntity?.type === 'enum') {
             setDeleteTarget({ name: activeEntity.enumName, type: 'enum' });
+          } else if (activeEntity?.type === 'label' && activeSchemaId) {
+            deleteLabelFromCanvas(activeSchemaId, activeEntity.labelId);
+            clearActiveEntity();
           }
         }
         return;
       }
 
-      // Escape → deselect / exit focus mode
+      // Escape → deselect / exit focus mode / clear sticky highlight
       if (e.key === 'Escape') {
         clearActiveEntity();
         useAppStore.getState().setFocusMode(null);
+        setHighlightPinnedNodeId(null);
         return;
       }
 
@@ -648,7 +751,19 @@ function SchemaCanvasInner() {
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeEntity, clearActiveEntity, fitView, isReadOnly, storeNodes, setSelection]);
+  }, [activeEntity, clearActiveEntity, fitView, isReadOnly, storeNodes, setSelection, activeSchemaId, deleteLabelFromCanvas]);
+
+  // Memoized adjacency map: nodeId → Set of connected edge IDs (for O(1) highlight lookup)
+  const edgeNeighborMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const edge of storeEdges) {
+      if (!map.has(edge.source)) map.set(edge.source, new Set());
+      if (!map.has(edge.target)) map.set(edge.target, new Set());
+      map.get(edge.source)!.add(edge.id);
+      map.get(edge.target)!.add(edge.id);
+    }
+    return map;
+  }, [storeEdges]);
 
   // Focus mode dimming
   const visibleNodeIds = useMemo<Set<string> | null>(() => {
@@ -674,6 +789,30 @@ function SchemaCanvasInner() {
     }));
   }, [storeNodes, visibleNodeIds]);
 
+  const displayEdges = useMemo(() => {
+    const filtered = storeEdges.filter((e) => !e.type || !hiddenEdgeTypes.has(e.type));
+
+    // Selection (sticky) takes priority over hover
+    let focusNodeId: string | null = null;
+    if (highlightOnSelection && highlightPinnedNodeId) {
+      focusNodeId = highlightPinnedNodeId;
+    } else if (highlightOnHover && hoveredNodeId) {
+      focusNodeId = hoveredNodeId;
+    }
+
+    if (!focusNodeId) return filtered;
+
+    const neighborEdges = edgeNeighborMap.get(focusNodeId) ?? new Set<string>();
+    return filtered.map((edge) => {
+      const isDimmed = !neighborEdges.has(edge.id);
+      return {
+        ...edge,
+        style: { ...edge.style, opacity: isDimmed ? 0.15 : 1, transition: 'opacity 0.15s' },
+        data: { ...edge.data, dimmed: isDimmed },
+      };
+    });
+  }, [storeEdges, hiddenEdgeTypes, highlightOnHover, highlightOnSelection, hoveredNodeId, highlightPinnedNodeId, edgeNeighborMap]);
+
   // Empty state
   if (!activeSchemaFile) {
     return (
@@ -691,7 +830,7 @@ function SchemaCanvasInner() {
       <EdgeMarkerDefs />
       <ReactFlow
         nodes={displayNodes}
-        edges={storeEdges}
+        edges={displayEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes as unknown as EdgeTypes}
         onNodesChange={onNodesChange}
@@ -699,6 +838,8 @@ function SchemaCanvasInner() {
         onMoveEnd={onMoveEnd}
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeClick={onNodeClick}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
         onConnect={onConnect}
@@ -732,6 +873,52 @@ function SchemaCanvasInner() {
 
       {/* Toolbar */}
       <div id="lme-canvas-toolbar" style={styles.toolbar}>
+        {EDGE_TOGGLE_DEFS.map(({ type, label, color }) => {
+          const hidden = hiddenEdgeTypes.has(type);
+          return (
+            <button
+              key={type}
+              id={`lme-canvas-toggle-${type}`}
+              style={{
+                ...styles.toolbarBtn,
+                borderColor: hidden ? 'var(--color-border-default)' : color,
+                color: hidden ? 'var(--color-fg-muted)' : color,
+                opacity: hidden ? 0.5 : 1,
+                textDecoration: hidden ? 'line-through' : 'none',
+              }}
+              onClick={() => toggleEdgeTypeVisibility(type)}
+              title={`${hidden ? 'Show' : 'Hide'} ${label} edges`}
+            >
+              {label}
+            </button>
+          );
+        })}
+        <div style={styles.toolbarSep} />
+        <button
+          id="lme-canvas-highlight-hover"
+          style={{
+            ...styles.toolbarBtn,
+            borderColor: highlightOnHover ? 'var(--color-accent-hover)' : 'var(--color-border-default)',
+            color: highlightOnHover ? 'var(--color-accent-hover)' : 'var(--color-fg-muted)',
+          }}
+          onClick={() => setHighlightOnHover(!highlightOnHover)}
+          title={`${highlightOnHover ? 'Disable' : 'Enable'} edge highlight on hover`}
+        >
+          Hover hl
+        </button>
+        <button
+          id="lme-canvas-highlight-selection"
+          style={{
+            ...styles.toolbarBtn,
+            borderColor: highlightOnSelection ? 'var(--color-accent-hover)' : 'var(--color-border-default)',
+            color: highlightOnSelection ? 'var(--color-accent-hover)' : 'var(--color-fg-muted)',
+          }}
+          onClick={() => setHighlightOnSelection(!highlightOnSelection)}
+          title={`${highlightOnSelection ? 'Disable' : 'Enable'} edge highlight on selection`}
+        >
+          Select hl
+        </button>
+        <div style={styles.toolbarSep} />
         {!isReadOnly && (
           <>
             <button
@@ -789,6 +976,7 @@ function SchemaCanvasInner() {
           onClose={() => setContextMenu(null)}
           onAddClass={handleAddClass}
           onAddEnum={handleAddEnum}
+          onAddLabel={handleAddLabel}
           onDeleteNode={handleDeleteNode}
         />
       )}
@@ -865,6 +1053,13 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
     display: 'flex',
     alignItems: 'center',
+  },
+  toolbarSep: {
+    width: 1,
+    height: 24,
+    background: 'var(--color-border-default)',
+    alignSelf: 'center',
+    flexShrink: 0,
   },
   readOnlyBanner: {
     position: 'absolute',

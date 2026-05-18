@@ -5,6 +5,7 @@ export type ActiveEntity =
   | { type: 'slot'; className: string; slotName: string }
   | { type: 'enum'; enumName: string }
   | { type: 'edge'; edgeId: string }
+  | { type: 'label'; labelId: string }
   | null;
 
 export interface EditorSlice {
