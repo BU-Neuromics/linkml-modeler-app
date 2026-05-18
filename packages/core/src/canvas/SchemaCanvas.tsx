@@ -12,6 +12,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import ReactFlow, {
   Background,
   Controls,
+  EdgeTypes,
   MiniMap,
   NodeTypes,
   OnNodesChange,
@@ -47,11 +48,12 @@ function cssToken(name: string): string {
 }
 
 // ── Node type registry ────────────────────────────────────────────────────────
-const nodeTypes: NodeTypes = {
+// Cast required: ReactFlow 11 types predate React 19's expanded ReactNode (bigint)
+const nodeTypes = {
   classNode: ClassNode,
   enumNode: EnumNode,
   importGroupNode: ImportGroupNode,
-};
+} as unknown as NodeTypes;
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 interface ContextMenu {
@@ -691,7 +693,7 @@ function SchemaCanvasInner() {
         nodes={displayNodes}
         edges={storeEdges}
         nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
+        edgeTypes={edgeTypes as unknown as EdgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onMoveEnd={onMoveEnd}

@@ -3,6 +3,11 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  // Rolldown (Vite 8) statically replaces process.env.NODE_ENV; force dev so
+  // React loads its development build (which exports act()) during tests.
+  define: {
+    'process.env.NODE_ENV': JSON.stringify('development'),
+  },
   test: {
     globals: true,
     environment: 'jsdom',
