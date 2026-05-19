@@ -13,7 +13,7 @@ export {
   buildManifestData,
   applyManifestToSchemas,
 } from './io/editorManifest.js';
-export type { EditorManifestData, SchemaManifestEntry } from './io/editorManifest.js';
+export type { EditorManifestData, SchemaManifestEntry, ViewDefinition, ViewMember, ViewLayout, EdgeFilterSet } from './io/editorManifest.js';
 export {
   isLocalImport,
   resolveImportPath,

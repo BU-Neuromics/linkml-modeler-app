@@ -1,9 +1,10 @@
 /**
- * FocusModeToolbar — M6 focus mode controls.
+ * FocusModeToolbar — ephemeral focus mode controls + "Save as View" shortcut.
  *
  * Provides:
  *  1. Subset-based focus: dropdown of available subsets → dim non-member classes
- *  2. Selection-based focus: "Focus Selection" button → isolate selected nodes + neighbors
+ *  2. Selection-based focus: "Focus Selection" button → isolate selected nodes
+ *  3. "Save as View" — persists current selection as a named View (A1)
  *
  * Placed as an overlay inside SchemaCanvas (or as a standalone toolbar strip).
  */
@@ -16,6 +17,9 @@ export function FocusModeToolbar() {
   const focusMode = useAppStore((s) => s.focusMode);
   const setFocusMode = useAppStore((s) => s.setFocusMode);
   const selectedNodeIds = useAppStore((s) => s.selectedNodeIds);
+  const views = useAppStore((s) => s.views);
+  const createView = useAppStore((s) => s.createView);
+  const setActiveViewId = useAppStore((s) => s.setActiveViewId);
 
   // Collect subsets from the active schema
   const subsets = useMemo(() => {
@@ -43,6 +47,17 @@ export function FocusModeToolbar() {
   }, [setFocusMode]);
 
   const handleExit = useCallback(() => setFocusMode(null), [setFocusMode]);
+
+  // Save current selection as a persistent named View
+  const handleSaveAsView = useCallback(() => {
+    if (!activeSchemaFile || selectedNodeIds.length === 0) return;
+    const members = selectedNodeIds.map((name) => {
+      const isEnum = name in (activeSchemaFile.schema.enums ?? {});
+      return { schemaFilePath: activeSchemaFile.filePath, name, kind: (isEnum ? 'enum' : 'class') as 'class' | 'enum' };
+    });
+    const view = createView({ name: `View ${views.length + 1}`, members });
+    setActiveViewId(view.id);
+  }, [activeSchemaFile, selectedNodeIds, views.length, createView, setActiveViewId]);
 
   if (!activeSchemaFile) return null;
 
@@ -90,6 +105,23 @@ export function FocusModeToolbar() {
         {selectedNodeIds.length > 0 && (
           <span style={styles.selCount}>{selectedNodeIds.length}</span>
         )}
+      </button>
+
+      {/* Save as View */}
+      <button
+        style={{
+          ...styles.saveViewBtn,
+          ...(selectedNodeIds.length === 0 ? styles.focusBtnDisabled : {}),
+        }}
+        onClick={handleSaveAsView}
+        disabled={selectedNodeIds.length === 0}
+        title={
+          selectedNodeIds.length === 0
+            ? 'Select nodes first to save them as a persistent view'
+            : `Save ${selectedNodeIds.length} selected node(s) as a named view`
+        }
+      >
+        + Save View
       </button>
 
       {/* Exit focus */}
@@ -174,5 +206,17 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
+  },
+  saveViewBtn: {
+    background: 'var(--color-bg-surface)',
+    border: '1px solid var(--color-border-default)',
+    color: 'var(--color-fg-secondary)',
+    borderRadius: 4,
+    padding: '3px 10px',
+    fontSize: 11,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
   },
 };
