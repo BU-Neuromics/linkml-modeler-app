@@ -553,12 +553,14 @@ export function OutlineView() {
     [focusedId, navigableIds, rows, expanded, toggleExpanded, selectClass, selectEnum]
   );
 
-  // Auto-focus on mount
+  // Auto-focus on mount (intentional one-shot effect — set initial focus only)
+  /* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
   useEffect(() => {
     if (navigableIds.length > 0 && !focusedId) {
       setFocusedId(navigableIds[0]);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+  /* eslint-enable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
 
   if (!schema) {
     return (
