@@ -133,6 +133,11 @@ export function CommandPalette() {
 
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const [prevQuery, setPrevQuery] = useState(query);
+  if (prevQuery !== query) {
+    setPrevQuery(query);
+    setActiveIndex(0);
+  }
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -253,10 +258,6 @@ export function CommandPalette() {
   }, [allItems, query]);
 
   useEffect(() => {
-    setActiveIndex(0);
-  }, [query]);
-
-  useEffect(() => {
     if (!listRef.current) return;
     const el = listRef.current.querySelector<HTMLElement>(
       `[data-palette-index="${activeIndex}"]`
@@ -317,7 +318,7 @@ export function CommandPalette() {
           spellCheck={false}
         />
         {filteredItems.length === 0 ? (
-          <div style={styles.empty}>No results for "{query}"</div>
+          <div style={styles.empty}>No results for &quot;{query}&quot;</div>
         ) : (
           <div ref={listRef} style={styles.list} role="listbox">
             {groups.map(({ kind, items }) => (
