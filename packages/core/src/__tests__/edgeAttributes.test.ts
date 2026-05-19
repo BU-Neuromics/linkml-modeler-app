@@ -474,3 +474,66 @@ classes:
     expect(graph.edges).toHaveLength(0);
   });
 });
+
+// ── 7. rangeEdgesMode inline/auto suppression (B1) ──────────────────────────
+describe('deriveGraph rangeEdgesMode (B1)', () => {
+  const INLINE_YAML = `
+id: https://example.org/inlinetest
+name: inlinetest
+prefixes:
+  linkml: https://w3id.org/linkml/
+default_prefix: inlinetest
+imports:
+  - linkml:types
+classes:
+  Author:
+    attributes:
+      name:
+        range: string
+  Book:
+    attributes:
+      author:
+        range: Author
+      title:
+        range: string
+`.trim();
+
+  it('emits range edges in show mode (default)', () => {
+    const schema = parseYaml(INLINE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, {}, new Set(), false, 'show');
+    expect(graph.edges.filter((e) => e.type === 'range')).toHaveLength(1);
+  });
+
+  it('suppresses range edges in inline mode', () => {
+    const schema = parseYaml(INLINE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, {}, new Set(), false, 'inline');
+    expect(graph.edges.filter((e) => e.type === 'range')).toHaveLength(0);
+    // Non-range edges are unaffected
+    expect(graph.edges.filter((e) => e.type !== 'range')).toHaveLength(0);
+  });
+
+  it('suppresses range edges in auto mode', () => {
+    const schema = parseYaml(INLINE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, {}, new Set(), false, 'auto');
+    expect(graph.edges.filter((e) => e.type === 'range')).toHaveLength(0);
+  });
+
+  it('marks rangeIsEntity on slots whose range is a class', () => {
+    const schema = parseYaml(INLINE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, {}, new Set(), false, 'inline');
+    const bookNode = graph.nodes.find((n) => n.id === 'Book');
+    const bookData = bookNode?.data as import('../canvas/ClassNode.js').ClassNodeData;
+    const authorSlot = bookData.resolvedSlots?.find((r) => r.slot.name === 'author');
+    const titleSlot = bookData.resolvedSlots?.find((r) => r.slot.name === 'title');
+    expect(authorSlot?.rangeIsEntity).toBe(true);  // Author is a class
+    expect(titleSlot?.rangeIsEntity).toBeFalsy();   // string is not in schema.classes
+  });
+
+  it('passes rangeEdgesMode through to ClassNodeData', () => {
+    const schema = parseYaml(INLINE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, {}, new Set(), false, 'inline');
+    const bookNode = graph.nodes.find((n) => n.id === 'Book');
+    const bookData = bookNode?.data as import('../canvas/ClassNode.js').ClassNodeData;
+    expect(bookData.rangeEdgesMode).toBe('inline');
+  });
+});
