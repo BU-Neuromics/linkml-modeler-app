@@ -22,6 +22,7 @@ export interface EditorSlice {
   newSchemaDialogOpen: boolean;
   switchProjectDialogOpen: boolean;
   openFromUrlDialogOpen: boolean;
+  commandPaletteOpen: boolean;
 
   // Actions
   setActiveEntity(entity: ActiveEntity): void;
@@ -37,6 +38,7 @@ export interface EditorSlice {
   setNewSchemaDialogOpen(open: boolean): void;
   setSwitchProjectDialogOpen(open: boolean): void;
   setOpenFromUrlDialogOpen(open: boolean): void;
+  setCommandPaletteOpen(open: boolean): void;
 }
 
 export const createEditorSlice: StateCreator<EditorSlice, [], [], EditorSlice> = (set) => ({
@@ -52,6 +54,7 @@ export const createEditorSlice: StateCreator<EditorSlice, [], [], EditorSlice> =
   newSchemaDialogOpen: false,
   switchProjectDialogOpen: false,
   openFromUrlDialogOpen: false,
+  commandPaletteOpen: false,
 
   setActiveEntity(entity) {
     set({ activeEntity: entity });
@@ -103,5 +106,9 @@ export const createEditorSlice: StateCreator<EditorSlice, [], [], EditorSlice> =
 
   setOpenFromUrlDialogOpen(open) {
     set({ openFromUrlDialogOpen: open });
+  },
+
+  setCommandPaletteOpen(open) {
+    set({ commandPaletteOpen: open });
   },
 });
