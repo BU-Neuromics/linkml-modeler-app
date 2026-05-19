@@ -15,6 +15,17 @@ const HIDDEN_EDGE_TYPES_KEY = 'linkml-editor-hidden-edge-types';
 const HIGHLIGHT_SETTINGS_KEY = 'linkml-editor-highlight-settings';
 const HOP_DIMMING_KEY = 'linkml-editor-hop-dimming';
 const GROUP_BY_IMPORT_SOURCE_KEY = 'linkml-editor-group-by-import-source';
+const RANGE_EDGES_MODE_KEY = 'linkml-editor-range-edges-mode';
+
+export type RangeEdgesMode = 'show' | 'inline' | 'auto';
+
+function loadRangeEdgesMode(): RangeEdgesMode {
+  try {
+    const raw = localStorage.getItem(RANGE_EDGES_MODE_KEY);
+    if (raw === 'show' || raw === 'inline' || raw === 'auto') return raw;
+  } catch { /* ignore */ }
+  return 'show';
+}
 
 function loadGroupByImportSource(): boolean {
   try {
@@ -91,6 +102,8 @@ export interface UISlice {
   hopDimmingN: number;
   /** Whether ghost (imported) nodes are grouped by their source schema file (D1). Off by default. */
   groupByImportSource: boolean;
+  /** Global range-edge rendering mode: show edges, inline as chips, or auto-decide (B1). */
+  globalRangeEdgesMode: RangeEdgesMode;
 
   // Actions
   setTheme(theme: Theme): void;
@@ -111,6 +124,7 @@ export interface UISlice {
   setHopDimmingEnabled(value: boolean): void;
   setHopDimmingN(n: number): void;
   setGroupByImportSource(value: boolean): void;
+  setGlobalRangeEdgesMode(mode: RangeEdgesMode): void;
 }
 
 let toastCounter = 0;
@@ -130,6 +144,7 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   hopDimmingEnabled: loadHopDimming().enabled,
   hopDimmingN: loadHopDimming().n,
   groupByImportSource: loadGroupByImportSource(),
+  globalRangeEdgesMode: loadRangeEdgesMode(),
 
   setTheme(theme) {
     set({ theme });
@@ -219,5 +234,10 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   setGroupByImportSource(value) {
     try { localStorage.setItem(GROUP_BY_IMPORT_SOURCE_KEY, JSON.stringify(value)); } catch { /* ignore */ }
     set({ groupByImportSource: value });
+  },
+
+  setGlobalRangeEdgesMode(mode) {
+    try { localStorage.setItem(RANGE_EDGES_MODE_KEY, mode); } catch { /* ignore */ }
+    set({ globalRangeEdgesMode: mode });
   },
 });
