@@ -708,10 +708,12 @@ async function bootstrap() {
       },
       /** Scan an OPFS directory for LinkML schemas and open as project. */
       async openProjectFromPath(dirPath: string) {
-        const { project, hiddenSchemaIds } = await openProjectFromDirectory(dirPath, platformRef.current);
+        const { project, hiddenSchemaIds, views, activeViewId } = await openProjectFromDirectory(dirPath, platformRef.current);
         if (project.schemas.length > 0) {
           useAppStore.getState().setProject(project);
           useAppStore.getState().setHiddenSchemaIds(hiddenSchemaIds);
+          useAppStore.getState().setViews(views);
+          useAppStore.getState().setActiveViewId(activeViewId);
         }
       },
       /** Set the active project's rootPath so Ctrl+S writes to OPFS directly. */

@@ -38,6 +38,8 @@ export function SplashPage({ demoUrl, onLoadDemo }: { demoUrl?: string; onLoadDe
   const setCloneDialogOpen = useAppStore((s) => s.setCloneDialogOpen);
   const setOpenFromUrlDialogOpen = useAppStore((s) => s.setOpenFromUrlDialogOpen);
   const setHiddenSchemaIds = useAppStore((s) => s.setHiddenSchemaIds);
+  const setViews = useAppStore((s) => s.setViews);
+  const setActiveViewId = useAppStore((s) => s.setActiveViewId);
   const { theme, setTheme } = useTheme();
 
   const [recentProjects, setRecentProjects] = React.useState<RecentProject[]>(() => getRecentProjects());
@@ -54,7 +56,7 @@ export function SplashPage({ demoUrl, onLoadDemo }: { demoUrl?: string; onLoadDe
 
     setIsLoading(true);
     try {
-      const { project, hiddenSchemaIds } = await openProjectFromDirectory(dirPath, platform);
+      const { project, hiddenSchemaIds, views, activeViewId } = await openProjectFromDirectory(dirPath, platform);
       if (project.schemas.length === 0) {
         pushToast({ message: 'No LinkML schemas found in this directory', severity: 'warning' });
         setIsLoading(false);
@@ -62,6 +64,8 @@ export function SplashPage({ demoUrl, onLoadDemo }: { demoUrl?: string; onLoadDe
       }
       setProject(project);
       setHiddenSchemaIds(hiddenSchemaIds);
+      setViews(views);
+      setActiveViewId(activeViewId);
       const hasGit = await platform.initGit(dirPath);
       setGitAvailable(hasGit);
     } catch (err) {
@@ -90,7 +94,7 @@ export function SplashPage({ demoUrl, onLoadDemo }: { demoUrl?: string; onLoadDe
   const handleOpenRecent = async (recent: RecentProject) => {
     setIsLoading(true);
     try {
-      const { project, hiddenSchemaIds } = await openProjectFromDirectory(recent.rootPath, platform);
+      const { project, hiddenSchemaIds, views, activeViewId } = await openProjectFromDirectory(recent.rootPath, platform);
       if (project.schemas.length === 0) {
         pushToast({ message: 'No LinkML schemas found — the directory may have changed', severity: 'warning' });
         setIsLoading(false);
@@ -99,6 +103,8 @@ export function SplashPage({ demoUrl, onLoadDemo }: { demoUrl?: string; onLoadDe
       project.name = recent.name;
       setProject(project);
       setHiddenSchemaIds(hiddenSchemaIds);
+      setViews(views);
+      setActiveViewId(activeViewId);
       const hasGit = await platform.initGit(recent.rootPath);
       setGitAvailable(hasGit);
     } catch (err) {

@@ -15,6 +15,13 @@
  *         nodes:
  *           MyClass: { x: 120, y: 80 }
  *         viewport: { x: 0, y: 0, zoom: 1 }
+ *   views:
+ *     - id: abc123
+ *       name: My View
+ *       members:
+ *         - { schemaFilePath: my-schema.yaml, name: MyClass, kind: class }
+ *       renderMode: canvas
+ *   activeViewId: abc123
  */
 
 import * as jsyaml from 'js-yaml';
@@ -23,11 +30,47 @@ import type { Project, CanvasLayout, SchemaFile } from '../model/index.js';
 
 export const MANIFEST_FILENAME = '.linkml-editor.yaml';
 
+// ── View types ────────────────────────────────────────────────────────────────
+
+/** Stub for future B2 edge-type filters. */
+export interface EdgeFilterSet {
+  hiddenTypes?: string[];
+}
+
+export interface ViewLayout {
+  nodes: Record<string, { x: number; y: number; collapsed?: boolean }>;
+  viewport?: { x: number; y: number; zoom: number };
+  labels?: Array<{ id: string; text: string; x: number; y: number; fontSize: number; locked: boolean }>;
+}
+
+/**
+ * A qualified entity reference within a view.
+ * Uses schemaFilePath (relative to project root) rather than runtime UUID
+ * so membership survives project close/reopen.
+ */
+export interface ViewMember {
+  schemaFilePath: string;
+  name: string;
+  kind: 'class' | 'enum';
+}
+
+export interface ViewDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  members: ViewMember[];
+  renderMode: 'canvas' | 'outline';
+  layout?: ViewLayout;
+  edgeFilters?: EdgeFilterSet;
+}
+
 // ── File format types ─────────────────────────────────────────────────────────
 
 export interface EditorManifestData {
   version: 1;
   schemas?: Record<string, SchemaManifestEntry>;
+  views?: ViewDefinition[];
+  activeViewId?: string;
 }
 
 export interface SchemaManifestEntry {
@@ -95,7 +138,9 @@ export function buildManifestData(
   project: Project,
   activeSchemaId: string | null,
   activeLayout: CanvasLayout | null,
-  hiddenSchemaIds: Set<string>
+  hiddenSchemaIds: Set<string>,
+  views: ViewDefinition[] = [],
+  activeViewId: string | null = null
 ): EditorManifestData {
   const schemas: Record<string, SchemaManifestEntry> = {};
 
@@ -124,18 +169,20 @@ export function buildManifestData(
   return {
     version: 1,
     ...(Object.keys(schemas).length > 0 ? { schemas } : {}),
+    ...(views.length > 0 ? { views } : {}),
+    ...(activeViewId ? { activeViewId } : {}),
   };
 }
 
 /**
  * Applies manifest data to a list of schema files, updating `canvasLayout` in
  * place (returns new SchemaFile objects — does not mutate). Also returns the
- * set of schema IDs that should be hidden.
+ * set of schema IDs that should be hidden, plus any persisted views.
  */
 export function applyManifestToSchemas(
   schemas: SchemaFile[],
   manifest: EditorManifestData
-): { schemas: SchemaFile[]; hiddenSchemaIds: Set<string> } {
+): { schemas: SchemaFile[]; hiddenSchemaIds: Set<string>; views: ViewDefinition[]; activeViewId: string | null } {
   const hiddenSchemaIds = new Set<string>();
   const manifestSchemas = manifest.schemas ?? {};
 
@@ -156,5 +203,10 @@ export function applyManifestToSchemas(
     return { ...sf, canvasLayout };
   });
 
-  return { schemas: updatedSchemas, hiddenSchemaIds };
+  return {
+    schemas: updatedSchemas,
+    hiddenSchemaIds,
+    views: manifest.views ?? [],
+    activeViewId: manifest.activeViewId ?? null,
+  };
 }
