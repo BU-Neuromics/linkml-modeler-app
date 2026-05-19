@@ -59,6 +59,8 @@ export interface UISlice {
   highlightOnHover: boolean;
   /** Whether selecting a node highlights its edges and dims all others (sticky) */
   highlightOnSelection: boolean;
+  /** Global rendering mode used when no view is active or the active view has no override */
+  globalRenderMode: 'canvas' | 'outline';
 
   // Actions
   setTheme(theme: Theme): void;
@@ -75,6 +77,7 @@ export interface UISlice {
   toggleEdgeTypeVisibility(type: string): void;
   setHighlightOnHover(value: boolean): void;
   setHighlightOnSelection(value: boolean): void;
+  setGlobalRenderMode(mode: 'canvas' | 'outline'): void;
 }
 
 let toastCounter = 0;
@@ -90,6 +93,7 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   hiddenEdgeTypes: loadHiddenEdgeTypes(),
   highlightOnHover: loadHighlightSettings().onHover,
   highlightOnSelection: loadHighlightSettings().onSelection,
+  globalRenderMode: 'canvas',
 
   setTheme(theme) {
     set({ theme });
@@ -155,5 +159,9 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
       saveHighlightSettings(state.highlightOnHover, value);
       return { highlightOnSelection: value };
     });
+  },
+
+  setGlobalRenderMode(mode) {
+    set({ globalRenderMode: mode });
   },
 });

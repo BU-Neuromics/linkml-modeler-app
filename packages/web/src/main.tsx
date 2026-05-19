@@ -50,6 +50,7 @@ import {
   MenuBar,
   SplashPage,
   SchemaCanvas,
+  OutlineView,
   CloneDialog,
   OpenSchemaFromUrlDialog,
   ImportSchemaDialog,
@@ -313,6 +314,15 @@ function App() {
   const openFromUrlDialogOpen = useAppStore((s) => s.openFromUrlDialogOpen);
   const setOpenFromUrlDialogOpen = useAppStore((s) => s.setOpenFromUrlDialogOpen);
   const syncStatus = useAppStore((s) => s.syncStatus);
+  const globalRenderMode = useAppStore((s) => s.globalRenderMode);
+  const views = useAppStore((s) => s.views);
+  const activeViewId = useAppStore((s) => s.activeViewId);
+
+  // Compute effective render mode: active view overrides global default
+  const activeRenderMode = React.useMemo(() => {
+    const activeView = views.find((v) => v.id === activeViewId);
+    return activeView ? activeView.renderMode : globalRenderMode;
+  }, [views, activeViewId, globalRenderMode]);
 
   // Enable "Switch Project" when 2+ projects are registered
   const [registeredProjectCount, setRegisteredProjectCount] = React.useState(() =>
@@ -510,7 +520,7 @@ function App() {
         <div style={styles.canvasColumn}>
           <FocusModeToolbar />
           <div id="lme-canvas-area" style={styles.canvasArea}>
-            <SchemaCanvas />
+            {activeRenderMode === 'outline' ? <OutlineView /> : <SchemaCanvas />}
           </div>
         </div>
 
