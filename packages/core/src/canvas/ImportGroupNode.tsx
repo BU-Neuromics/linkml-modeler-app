@@ -1,9 +1,12 @@
+/**
+ * ImportGroupNode — kept for potential reuse by D1 (Auto-Clustering by Import Source).
+ * Currently unwired from the canvas (not in nodeTypes, not created by deriveGraph).
+ */
 import React, { memo } from 'react';
 import { NodeProps } from 'reactflow';
-import type { CanvasNodeData } from '../store/slices/canvasSlice.js';
-import { useAppStore } from '../store/index.js';
 
-export interface ImportGroupNodeData extends CanvasNodeData {
+export interface ImportGroupNodeData {
+  entityId: string;
   entityType: 'importGroup';
   label: string;
   sourceFilePath: string;
@@ -11,15 +14,13 @@ export interface ImportGroupNodeData extends CanvasNodeData {
   childCount: number;
 }
 
-function ImportGroupNode({ id, data }: NodeProps<ImportGroupNodeData>) {
+function ImportGroupNode({ data }: NodeProps<ImportGroupNodeData>) {
   const { label, collapsed, childCount } = data;
-  const toggleCollapsedGroup = useAppStore((s) => s.toggleCollapsedGroup);
 
   return (
     <div style={styles.wrapper}>
       <div
         style={styles.header}
-        onClick={(e) => { e.stopPropagation(); toggleCollapsedGroup(id); }}
         title={collapsed ? 'Click to expand' : 'Click to collapse'}
       >
         <span style={styles.chevron}>{collapsed ? '\u25B6' : '\u25BC'}</span>

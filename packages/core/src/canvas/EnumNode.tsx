@@ -8,13 +8,13 @@ export interface EnumNodeData extends CanvasNodeData {
   entityType: 'enum';
   enumDef: EnumDefinition;
   collapsed: boolean;
-  ghost?: boolean; // True for read-only imported enums
+  imported?: boolean; // True for read-only imported enums
 }
 
 const VALUE_LIMIT = 12;
 
 function EnumNode({ data, selected }: NodeProps<EnumNodeData>) {
-  const { enumDef, collapsed, ghost } = data;
+  const { enumDef, collapsed, imported } = data;
   const values = Object.values(enumDef.permissibleValues);
   const visibleValues = collapsed ? [] : values.slice(0, VALUE_LIMIT);
   const hiddenCount = collapsed ? 0 : Math.max(0, values.length - VALUE_LIMIT);
@@ -23,8 +23,8 @@ function EnumNode({ data, selected }: NodeProps<EnumNodeData>) {
     <div
       style={{
         ...styles.wrapper,
-        ...(ghost ? styles.ghostWrapper : {}),
-        outline: selected ? '2px solid var(--color-accent-hover)' : ghost ? '1px dashed #4a3a1e' : '1px solid var(--color-border-default)',
+        ...(imported ? styles.importedWrapper : {}),
+        outline: selected ? '2px solid var(--color-accent-hover)' : '1px solid var(--color-border-default)',
       }}
     >
       {/* Enum nodes only receive edges (range targets) */}
@@ -45,7 +45,7 @@ function EnumNode({ data, selected }: NodeProps<EnumNodeData>) {
       />
 
       {/* Header */}
-      <div style={{ ...styles.header, ...(ghost ? styles.ghostHeader : {}) }}>
+      <div style={{ ...styles.header, ...(imported ? styles.importedHeader : {}) }}>
         <span style={styles.nodeIcon}><Diamond size={14} /></span>
         <span style={styles.headerTitle}>{enumDef.name}</span>
       </div>
@@ -89,11 +89,11 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--color-fg-primary)',
     overflow: 'hidden',
   },
-  ghostWrapper: {
+  importedWrapper: {
     background: 'var(--color-bg-deep)',
     opacity: 0.72,
   },
-  ghostHeader: {
+  importedHeader: {
     background: 'var(--color-state-warning-bg)',
   },
   handle: {

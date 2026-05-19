@@ -9,7 +9,6 @@ import type { LinkMLSchema, CanvasLayout, SlotDefinition } from '../model/index.
 import type { CanvasNodeData } from '../store/slices/canvasSlice.js';
 import type { ClassNodeData, ResolvedSlot } from './ClassNode.js';
 import type { EnumNodeData } from './EnumNode.js';
-import type { ImportGroupNodeData } from './ImportGroupNode.js';
 import type { LabelNodeData } from './LabelNode.js';
 import type { LinkMLEdgeType } from './edges.js';
 import type { ImportedEntity } from '../io/importResolver.js';
@@ -25,34 +24,10 @@ const GRID_COLS = 5;
 const GRID_H_GAP = 280;
 const GRID_V_GAP = 160;
 
-// Import group layout constants
-const GROUP_PADDING = 16;
-const GROUP_HEADER = 36;
-const GROUP_INNER_COLS = 3;
-const GROUP_INNER_H_GAP = 260;
-const GROUP_INNER_V_GAP = 140;
-
 function gridPosition(index: number): { x: number; y: number } {
   const col = index % GRID_COLS;
   const row = Math.floor(index / GRID_COLS);
   return { x: col * GRID_H_GAP, y: row * GRID_V_GAP };
-}
-
-/** Compute a grid position for a child within a group container. */
-function groupChildPosition(index: number): { x: number; y: number } {
-  const col = index % GROUP_INNER_COLS;
-  const row = Math.floor(index / GROUP_INNER_COLS);
-  return {
-    x: GROUP_PADDING + col * GROUP_INNER_H_GAP,
-    y: GROUP_HEADER + GROUP_PADDING + row * GROUP_INNER_V_GAP,
-  };
-}
-
-/** Extract a human-friendly label from a file path. */
-function labelFromPath(filePath: string): string {
-  const parts = filePath.split('/');
-  const file = parts[parts.length - 1];
-  return file.replace(/\.ya?ml$/, '');
 }
 
 export interface DerivedGraph {
@@ -160,8 +135,7 @@ export function deriveGraph(
   schema: LinkMLSchema,
   layout: CanvasLayout,
   collapsed: Record<string, boolean> = {},
-  ghostEntities: ImportedEntity[] = [],
-  collapsedGroups: Record<string, boolean> = {},
+  importedEntities: ImportedEntity[] = [],
   allSchemaSlots: Record<string, SlotDefinition> = {}
 ): DerivedGraph {
   const nodes: Node<CanvasNodeData>[] = [];
@@ -352,138 +326,54 @@ export function deriveGraph(
     });
   }
 
-  // ── Ghost nodes (imported entities grouped by source schema) ───────────────
+  // ── Imported entities (flat nodes, no grouping) ────────────────────────────
   const existingIds = new Set(nodes.map((n) => n.id));
+  const allImportedIds = new Set<string>();
 
-  // Group ghost entities by source file path
-  const ghostGroups = new Map<string, ImportedEntity[]>();
-  for (const entity of ghostEntities) {
+  for (const entity of importedEntities) {
     if (existingIds.has(entity.name)) continue; // local definition takes priority
-    const ghostId = `ghost__${entity.name}`;
-    if (existingIds.has(ghostId)) continue;
 
-    const group = ghostGroups.get(entity.sourceFilePath) ?? [];
-    group.push(entity);
-    ghostGroups.set(entity.sourceFilePath, group);
-  }
+    existingIds.add(entity.name);
+    allImportedIds.add(entity.name);
 
-  // Track all ghost IDs for edge creation
-  const allGhostIds = new Set<string>();
+    const pos = layout.nodes[entity.name] ?? gridPosition(gridIndex++);
 
-  for (const [sourceFile, entities] of ghostGroups) {
-    const groupId = `importGroup__${sourceFile}`;
-    const isGroupCollapsed = collapsedGroups[groupId] ?? false;
-
-    // Group's absolute position (saved directly, not derived from children)
-    const groupPos = layout.nodes[groupId] ?? gridPosition(gridIndex++);
-
-    // Compute children with RELATIVE positions (relative to group top-left).
-    // Saved layout stores ghost positions as relative; defaults use the inner grid.
-    const childEntries: Array<{
-      ghostId: string;
-      entity: ImportedEntity;
-      relX: number;
-      relY: number;
-      w: number;
-      h: number;
-    }> = [];
-
-    let maxRelX = 0;
-    let maxRelY = GROUP_HEADER + GROUP_PADDING;
-
-    for (let i = 0; i < entities.length; i++) {
-      const entity = entities[i];
-      const ghostId = `ghost__${entity.name}`;
-      const w = entity.type === 'class' ? CLASS_NODE_WIDTH : ENUM_NODE_WIDTH;
-      const h = entity.type === 'class' ? CLASS_NODE_HEIGHT : ENUM_NODE_HEIGHT;
-
-      // Saved position is relative to the group
-      const savedPos = layout.nodes[ghostId];
-      const relX = savedPos?.x ?? groupChildPosition(i).x;
-      const relY = savedPos?.y ?? groupChildPosition(i).y;
-
-      childEntries.push({ ghostId, entity, relX, relY, w, h });
-      maxRelX = Math.max(maxRelX, relX + w);
-      maxRelY = Math.max(maxRelY, relY + h);
-    }
-
-    const groupWidth = maxRelX + GROUP_PADDING;
-    const expandedHeight = maxRelY + GROUP_PADDING;
-    const collapsedHeight = GROUP_HEADER + GROUP_PADDING;
-
-    // Create group background node (inserted at beginning for lower z-index)
-    const groupData: ImportGroupNodeData = {
-      entityId: groupId,
-      entityType: 'importGroup',
-      label: labelFromPath(sourceFile),
-      sourceFilePath: sourceFile,
-      collapsed: isGroupCollapsed,
-      childCount: entities.length,
-    };
-
-    nodes.unshift({
-      id: groupId,
-      type: 'importGroupNode',
-      position: { x: groupPos.x, y: groupPos.y },
-      data: groupData as unknown as CanvasNodeData,
-      style: {
-        width: groupWidth,
-        height: isGroupCollapsed ? collapsedHeight : expandedHeight,
-      },
-      zIndex: -1,
-      draggable: true,
-      selectable: true,
-    });
-
-    // Only add child nodes when the group is expanded.
-    // Children use parentId so they move with the group and positions are relative.
-    if (!isGroupCollapsed) {
-      for (const child of childEntries) {
-        existingIds.add(child.ghostId);
-        allGhostIds.add(child.ghostId);
-
-        if (child.entity.type === 'class') {
-          const nodeData: ClassNodeData = {
-            entityId: child.entity.name,
-            entityType: 'class',
-            classDef: child.entity.schema.classes[child.entity.name],
-            collapsed: false,
-            ghost: true,
-          };
-          nodes.push({
-            id: child.ghostId,
-            type: 'classNode',
-            parentId: groupId,
-            expandParent: false,
-            position: { x: child.relX, y: child.relY },
-            data: nodeData as unknown as CanvasNodeData,
-            width: CLASS_NODE_WIDTH,
-            height: CLASS_NODE_HEIGHT,
-          });
-        } else {
-          const nodeData: EnumNodeData = {
-            entityId: child.entity.name,
-            entityType: 'enum',
-            enumDef: child.entity.schema.enums[child.entity.name],
-            collapsed: false,
-            ghost: true,
-          };
-          nodes.push({
-            id: child.ghostId,
-            type: 'enumNode',
-            parentId: groupId,
-            expandParent: false,
-            position: { x: child.relX, y: child.relY },
-            data: nodeData as unknown as CanvasNodeData,
-            width: ENUM_NODE_WIDTH,
-            height: ENUM_NODE_HEIGHT,
-          });
-        }
-      }
+    if (entity.type === 'class') {
+      const nodeData: ClassNodeData = {
+        entityId: entity.name,
+        entityType: 'class',
+        classDef: entity.schema.classes[entity.name],
+        collapsed: false,
+        imported: true,
+      };
+      nodes.push({
+        id: entity.name,
+        type: 'classNode',
+        position: { x: pos.x, y: pos.y },
+        data: nodeData as unknown as CanvasNodeData,
+        width: CLASS_NODE_WIDTH,
+        height: CLASS_NODE_HEIGHT,
+      });
+    } else {
+      const nodeData: EnumNodeData = {
+        entityId: entity.name,
+        entityType: 'enum',
+        enumDef: entity.schema.enums[entity.name],
+        collapsed: false,
+        imported: true,
+      };
+      nodes.push({
+        id: entity.name,
+        type: 'enumNode',
+        position: { x: pos.x, y: pos.y },
+        data: nodeData as unknown as CanvasNodeData,
+        width: ENUM_NODE_WIDTH,
+        height: ENUM_NODE_HEIGHT,
+      });
     }
   }
 
-  // ── Range / is_a / mixin edges to ghost nodes ──────────────────────────────
+  // ── Range / is_a / mixin edges to imported nodes ───────────────────────────
   for (const [className, classDef] of Object.entries(schema.classes)) {
     const srcCollapsed = collapsed[className] ?? false;
 
@@ -491,15 +381,14 @@ export function deriveGraph(
     for (const [slotName, slot] of Object.entries(classDef.attributes)) {
       if (!slot.range) continue;
       if (slot.range === className) continue; // self-reference: no edge
-      const ghostId = `ghost__${slot.range}`;
       const edgeId = `range__${className}__${slotName}__${slot.range}`;
-      if (allGhostIds.has(ghostId) && !edges.find((e) => e.id === edgeId)) {
-        const handles = rangeHandles(layout, className, ghostId, slotName, srcCollapsed);
+      if (allImportedIds.has(slot.range) && !edges.find((e) => e.id === edgeId)) {
+        const handles = rangeHandles(layout, className, slot.range, slotName, srcCollapsed);
         edges.push({
           id: edgeId,
           type: 'range' as LinkMLEdgeType,
           source: className,
-          target: ghostId,
+          target: slot.range,
           label: slotName,
           ...handles,
           data: {
@@ -514,7 +403,7 @@ export function deriveGraph(
       }
     }
 
-    // Range edges (schema-level slot references to ghost nodes)
+    // Range edges (schema-level slot references to imported nodes)
     for (const slotName of classDef.slots) {
       const schemaSlot = allSchemaSlots[slotName] ?? schema.slots?.[slotName];
       if (!schemaSlot) continue;
@@ -522,16 +411,15 @@ export function deriveGraph(
       const effectiveRange = usage?.range ?? schemaSlot.range;
       if (!effectiveRange) continue;
       if (effectiveRange === className) continue; // self-reference: no edge
-      const ghostId = `ghost__${effectiveRange}`;
       const edgeId = `range__${className}__${slotName}__${effectiveRange}`;
-      if (allGhostIds.has(ghostId) && !edges.find((e) => e.id === edgeId)) {
+      if (allImportedIds.has(effectiveRange) && !edges.find((e) => e.id === edgeId)) {
         const effectiveSlot = usage ? { ...schemaSlot, ...usage } : schemaSlot;
-        const handles = rangeHandles(layout, className, ghostId, slotName, srcCollapsed);
+        const handles = rangeHandles(layout, className, effectiveRange, slotName, srcCollapsed);
         edges.push({
           id: edgeId,
           type: 'range' as LinkMLEdgeType,
           source: className,
-          target: ghostId,
+          target: effectiveRange,
           label: slotName,
           ...handles,
           data: {
@@ -546,31 +434,27 @@ export function deriveGraph(
       }
     }
 
-    // is_a edge to ghost — source=ghost parent so handle direction is consistent
-    if (classDef.isA) {
-      const ghostId = `ghost__${classDef.isA}`;
-      if (allGhostIds.has(ghostId)) {
-        const edgeId = `isa__${className}__${classDef.isA}`;
-        edges.push({
-          id: edgeId,
-          type: 'is_a' as LinkMLEdgeType,
-          source: ghostId,
-          target: className,
-          animated: false,
-          data: elkData(layout, edgeId),
-        });
-      }
+    // is_a edge to imported — source=imported parent so handle direction is consistent
+    if (classDef.isA && allImportedIds.has(classDef.isA)) {
+      const edgeId = `isa__${className}__${classDef.isA}`;
+      edges.push({
+        id: edgeId,
+        type: 'is_a' as LinkMLEdgeType,
+        source: classDef.isA,
+        target: className,
+        animated: false,
+        data: elkData(layout, edgeId),
+      });
     }
 
-    // mixin edges to ghost — same reversal
+    // mixin edges to imported — same reversal
     for (const mixinName of classDef.mixins) {
-      const ghostId = `ghost__${mixinName}`;
-      if (allGhostIds.has(ghostId)) {
+      if (allImportedIds.has(mixinName)) {
         const edgeId = `mixin__${className}__${mixinName}`;
         edges.push({
           id: edgeId,
           type: 'mixin' as LinkMLEdgeType,
-          source: ghostId,
+          source: mixinName,
           target: className,
           animated: false,
           data: elkData(layout, edgeId),
@@ -578,17 +462,16 @@ export function deriveGraph(
       }
     }
 
-    // union_of edges to ghost
+    // union_of edges to imported
     if (classDef.unionOf) {
       for (const memberName of classDef.unionOf) {
-        const ghostId = `ghost__${memberName}`;
-        if (allGhostIds.has(ghostId)) {
+        if (allImportedIds.has(memberName)) {
           const edgeId = `union__${className}__${memberName}`;
           edges.push({
             id: edgeId,
             type: 'union_of' as LinkMLEdgeType,
             source: className,
-            target: ghostId,
+            target: memberName,
             animated: false,
             data: elkData(layout, edgeId),
           });

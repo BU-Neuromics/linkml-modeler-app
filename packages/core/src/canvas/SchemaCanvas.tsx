@@ -30,7 +30,6 @@ import 'reactflow/dist/style.css';
 
 import ClassNode from './ClassNode.js';
 import EnumNode from './EnumNode.js';
-import ImportGroupNode from './ImportGroupNode.js';
 import LabelNode from './LabelNode.js';
 import { Diamond, Hexagon, Plus } from '../ui/icons/index.js';
 import { edgeTypes, EdgeMarkerDefs } from './edges.js';
@@ -53,7 +52,6 @@ function cssToken(name: string): string {
 const nodeTypes = {
   classNode: ClassNode,
   enumNode: EnumNode,
-  importGroupNode: ImportGroupNode,
   labelNode: LabelNode,
 } as unknown as NodeTypes;
 
@@ -246,7 +244,6 @@ function SchemaCanvasInner() {
   const updateNodePosition = useAppStore((s) => s.updateNodePosition);
   const setViewport = useAppStore((s) => s.setViewport);
   const toggleNodeCollapsed = useAppStore((s) => s.toggleNodeCollapsed);
-  const collapsedGroups = useAppStore((s) => s.collapsedGroups);
   const storeNodes = useAppStore((s) => s.nodes);
   const storeEdges = useAppStore((s) => s.edges);
   const viewport = useAppStore((s) => s.viewport);
@@ -348,11 +345,11 @@ function SchemaCanvasInner() {
     return merged;
   }, [activeProject?.schemas]);
 
-  // Derive graph (with ghost nodes grouped by source schema)
+  // Derive graph (imported entities rendered as ordinary flat nodes)
   const { nodes: derivedNodes, edges: derivedEdges } = useMemo(() => {
     if (!activeSchemaFile) return { nodes: [], edges: [] };
-    return deriveGraph(activeSchemaFile.schema, { ...localLayout, labels: effectiveLabels }, {}, ghostEntities, collapsedGroups, allSchemaSlots);
-  }, [activeSchemaFile, ghostEntities, localLayout, effectiveLabels, collapsedGroups, allSchemaSlots]);
+    return deriveGraph(activeSchemaFile.schema, { ...localLayout, labels: effectiveLabels }, {}, ghostEntities, allSchemaSlots);
+  }, [activeSchemaFile, ghostEntities, localLayout, effectiveLabels, allSchemaSlots]);
 
   useEffect(() => {
     setNodes(derivedNodes);
@@ -378,28 +375,28 @@ function SchemaCanvasInner() {
     layoutRanRef.current = false;
   }, [activeSchemaId]);
 
-  // Re-layout when new ghost entities appear that have no saved position
-  const prevGhostIdsRef = useRef<Set<string>>(new Set());
+  // Re-layout when new imported entities appear that have no saved position
+  const prevImportedIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!activeSchemaFile || ghostEntities.length === 0) {
-      prevGhostIdsRef.current = new Set();
+      prevImportedIdsRef.current = new Set();
       return;
     }
-    const currentIds = new Set(ghostEntities.map((e) => `ghost__${e.name}`));
-    const prevIds = prevGhostIdsRef.current;
+    const currentIds = new Set(ghostEntities.map((e) => e.name));
+    const prevIds = prevImportedIdsRef.current;
     const hasNew = [...currentIds].some((id) => !prevIds.has(id));
-    prevGhostIdsRef.current = currentIds;
+    prevImportedIdsRef.current = currentIds;
     if (!hasNew) return;
 
-    // Check if any new ghost nodes lack saved layout positions
+    // Check if any new imported nodes lack saved layout positions
     const hasUnsaved = [...currentIds].some(
       (id) => !prevIds.has(id) && !localLayoutRef.current.nodes[id]
     );
     if (!hasUnsaved) return;
 
-    // Re-run auto-layout to incorporate the new ghost nodes
+    // Re-run auto-layout to incorporate the new imported nodes
     runAutoLayout(activeSchemaFile.schema, {}, ghostEntities).then((layout) => {
-      // Merge: keep existing user-adjusted positions, add new ghost positions
+      // Merge: keep existing user-adjusted positions, add new imported positions
       setLocalLayout((prev) => ({
         nodes: { ...layout.nodes, ...prev.nodes },
         viewport: prev.viewport,
@@ -563,12 +560,8 @@ function SchemaCanvasInner() {
   const onConnect: OnConnect = useCallback(
     (connection) => {
       if (isReadOnly || !activeSchemaId || !connection.source || !connection.target) return;
-      // Ghost node IDs are prefixed with 'ghost__'; strip it to get the real class name
-      const targetName = connection.target.startsWith('ghost__')
-        ? connection.target.slice('ghost__'.length)
-        : connection.target;
-      autoAddImportForRange(activeSchemaId, targetName);
-      updateClass(activeSchemaId, connection.source, { isA: targetName });
+      autoAddImportForRange(activeSchemaId, connection.target);
+      updateClass(activeSchemaId, connection.source, { isA: connection.target });
     },
     [isReadOnly, activeSchemaId, updateClass, autoAddImportForRange]
   );

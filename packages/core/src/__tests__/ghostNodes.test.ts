@@ -1,6 +1,6 @@
 /**
- * Ghost node pipeline tests — verifies that entities from imported schemas
- * appear as ghost nodes on the canvas when referenced by the active schema.
+ * Imported-entity pipeline tests — verifies that entities from imported schemas
+ * appear as ordinary flat nodes on the canvas (B4: ghost node dissolution).
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -15,7 +15,7 @@ function makeSchemaFile(id: string, filePath: string, schema: ReturnType<typeof 
   return { id, filePath, schema, isDirty: false, canvasLayout: emptyCanvasLayout() };
 }
 
-describe('Ghost node pipeline', () => {
+describe('Imported entity pipeline', () => {
   it('collectImportedEntities finds classes from imported schema by filePath', () => {
     const baseSchema = {
       ...emptySchema('base', 'https://example.org/base', 'base'),
@@ -76,7 +76,7 @@ describe('Ghost node pipeline', () => {
     expect(referenced.some((e) => e.name === 'Animal')).toBe(false);
   });
 
-  it('deriveGraph creates ghost nodes for referenced imported entities', () => {
+  it('deriveGraph creates flat nodes for referenced imported entities (no ghost__ prefix, no importGroup)', () => {
     const baseSchema = {
       ...emptySchema('base', 'https://example.org/base', 'base'),
       classes: { Person: emptyClassDefinition('Person') },
@@ -92,21 +92,25 @@ describe('Ghost node pipeline', () => {
     };
     const mainFile = makeSchemaFile('m1', 'main.yaml', mainSchema);
 
-    const ghostEntities = collectReferencedImportedEntities(mainFile, [mainFile, baseFile]);
-    const { nodes, edges } = deriveGraph(mainSchema, emptyCanvasLayout(), {}, ghostEntities, {});
+    const importedEntities = collectReferencedImportedEntities(mainFile, [mainFile, baseFile]);
+    const { nodes, edges } = deriveGraph(mainSchema, emptyCanvasLayout(), {}, importedEntities);
 
-    // Should have: Event node, importGroup node, ghost__Person node
     const nodeIds = nodes.map((n) => n.id);
-    expect(nodeIds).toContain('Event');
-    expect(nodeIds).toContain('importGroup__base.yaml');
-    expect(nodeIds).toContain('ghost__Person');
 
-    // Should have a range edge from Event to ghost__Person
-    const rangeEdge = edges.find((e) => e.source === 'Event' && e.target === 'ghost__Person');
+    // Flat node: bare name, no ghost__ prefix
+    expect(nodeIds).toContain('Event');
+    expect(nodeIds).toContain('Person');
+
+    // No ghost__ or importGroup__ nodes
+    expect(nodeIds.some((id) => id.startsWith('ghost__'))).toBe(false);
+    expect(nodeIds.some((id) => id.startsWith('importGroup__'))).toBe(false);
+
+    // Range edge from Event to Person (bare name)
+    const rangeEdge = edges.find((e) => e.source === 'Event' && e.target === 'Person');
     expect(rangeEdge).toBeDefined();
   });
 
-  it('deriveGraph ghost nodes have correct ghost: true data', () => {
+  it('deriveGraph imported nodes have imported: true data', () => {
     const baseSchema = {
       ...emptySchema('base', 'https://example.org/base', 'base'),
       classes: { Person: emptyClassDefinition('Person') },
@@ -122,11 +126,16 @@ describe('Ghost node pipeline', () => {
     };
     const mainFile = makeSchemaFile('m1', 'main.yaml', mainSchema);
 
-    const ghostEntities = collectReferencedImportedEntities(mainFile, [mainFile, baseFile]);
-    const { nodes } = deriveGraph(mainSchema, emptyCanvasLayout(), {}, ghostEntities, {});
+    const importedEntities = collectReferencedImportedEntities(mainFile, [mainFile, baseFile]);
+    const { nodes } = deriveGraph(mainSchema, emptyCanvasLayout(), {}, importedEntities);
 
-    const ghostNode = nodes.find((n) => n.id === 'ghost__Person');
-    expect(ghostNode).toBeDefined();
-    expect((ghostNode?.data as { ghost?: boolean }).ghost).toBe(true);
+    const personNode = nodes.find((n) => n.id === 'Person');
+    expect(personNode).toBeDefined();
+    expect((personNode?.data as { imported?: boolean }).imported).toBe(true);
+
+    // Local Event node must NOT be marked imported
+    const eventNode = nodes.find((n) => n.id === 'Event');
+    expect(eventNode).toBeDefined();
+    expect((eventNode?.data as { imported?: boolean }).imported).toBeUndefined();
   });
 });

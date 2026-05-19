@@ -451,3 +451,90 @@ describe('auto-layout guard condition', () => {
     expect(hasLayout[0].id).toBe('s1');
   });
 });
+
+// ── B4 migration: ghost__/importGroup__ key migration ─────────────────────────
+
+describe('applyManifestToSchemas — B4 ghost__ key migration', () => {
+  it('rewrites ghost__<name> keys to bare <name> on read', () => {
+    const sf = makeSchemaFile('s1', 'schema.yaml');
+    const manifest: EditorManifestData = {
+      version: 1,
+      schemas: {
+        'schema.yaml': {
+          layout: {
+            nodes: {
+              'ghost__Person': { x: 100, y: 200 },
+              'ghost__Animal': { x: 300, y: 400 },
+            },
+          },
+        },
+      },
+    };
+    const { schemas } = applyManifestToSchemas([sf], manifest);
+    const nodes = schemas[0].canvasLayout.nodes;
+    expect(nodes['Person']).toEqual({ x: 100, y: 200 });
+    expect(nodes['Animal']).toEqual({ x: 300, y: 400 });
+    expect(Object.keys(nodes).some((k) => k.startsWith('ghost__'))).toBe(false);
+  });
+
+  it('drops importGroup__ keys', () => {
+    const sf = makeSchemaFile('s1', 'schema.yaml');
+    const manifest: EditorManifestData = {
+      version: 1,
+      schemas: {
+        'schema.yaml': {
+          layout: {
+            nodes: {
+              'importGroup__base.yaml': { x: 0, y: 0 },
+              'ghost__Person': { x: 10, y: 20 },
+              'LocalClass': { x: 50, y: 60 },
+            },
+          },
+        },
+      },
+    };
+    const { schemas } = applyManifestToSchemas([sf], manifest);
+    const nodes = schemas[0].canvasLayout.nodes;
+    expect(Object.keys(nodes)).not.toContain('importGroup__base.yaml');
+    expect(nodes['Person']).toEqual({ x: 10, y: 20 });
+    expect(nodes['LocalClass']).toEqual({ x: 50, y: 60 });
+  });
+
+  it('existing plain-name entry wins over ghost__ entry on collision', () => {
+    const sf = makeSchemaFile('s1', 'schema.yaml');
+    const manifest: EditorManifestData = {
+      version: 1,
+      schemas: {
+        'schema.yaml': {
+          layout: {
+            nodes: {
+              'ghost__Person': { x: 100, y: 200 },
+              'Person': { x: 999, y: 999 },
+            },
+          },
+        },
+      },
+    };
+    const { schemas } = applyManifestToSchemas([sf], manifest);
+    const nodes = schemas[0].canvasLayout.nodes;
+    expect(nodes['Person']).toEqual({ x: 999, y: 999 });
+    expect(Object.keys(nodes).some((k) => k.startsWith('ghost__'))).toBe(false);
+  });
+
+  it('is idempotent — migrating an already-migrated manifest is a no-op', () => {
+    const sf = makeSchemaFile('s1', 'schema.yaml');
+    const manifest: EditorManifestData = {
+      version: 1,
+      schemas: {
+        'schema.yaml': {
+          layout: {
+            nodes: { Person: { x: 10, y: 20 }, LocalClass: { x: 50, y: 60 } },
+          },
+        },
+      },
+    };
+    const { schemas } = applyManifestToSchemas([sf], manifest);
+    const nodes = schemas[0].canvasLayout.nodes;
+    expect(nodes).toEqual({ Person: { x: 10, y: 20 }, LocalClass: { x: 50, y: 60 } });
+  });
+});
