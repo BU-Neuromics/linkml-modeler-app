@@ -1,5 +1,10 @@
 import '@testing-library/jest-dom';
 
+// jsdom does not implement Element.scrollIntoView — provide a no-op.
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function () {};
+}
+
 // jsdom does not implement window.matchMedia — provide a stub.
 if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   Object.defineProperty(window, 'matchMedia', {

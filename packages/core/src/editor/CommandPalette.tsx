@@ -280,15 +280,19 @@ export function CommandPalette() {
     (e: React.KeyboardEvent) => {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
+        e.stopPropagation();
         setActiveIndex((i) => Math.min(i + 1, filteredItems.length - 1));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
+        e.stopPropagation();
         setActiveIndex((i) => Math.max(i - 1, 0));
       } else if (e.key === 'Enter') {
         e.preventDefault();
+        e.stopPropagation();
         filteredItems[activeIndex]?.activate();
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
         close();
       }
     },
