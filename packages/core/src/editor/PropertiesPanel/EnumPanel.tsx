@@ -7,6 +7,7 @@ import { DeleteButton, SectionHeader } from './internal.js';
 import { EmptyPanel } from './EmptyPanel.js';
 import { PermissibleValueEditor } from './PermissibleValueEditor.js';
 import { styles } from './styles.js';
+import { SubsetMembershipEditor } from './SubsetMembershipEditor.js';
 
 export function EnumPanel({ schemaId, enumName }: { schemaId: string; enumName: string }) {
   const schema = useAppStore((s) => s.getActiveSchema())?.schema;
@@ -92,6 +93,8 @@ export function EnumPanel({ schemaId, enumName }: { schemaId: string; enumName: 
           + Add
         </button>
       </div>
+
+      <SubsetMembershipEditor schemaId={schemaId} entityName={enumName} kind="enum" />
 
       <SectionHeader title="Actions" />
       <div style={styles.actionsRow}>

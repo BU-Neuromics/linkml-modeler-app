@@ -4,8 +4,9 @@
  * Section 1: Local schema files editable in this project.
  * Section 2: External schemas transitively imported (isReadOnly).
  * Section 3: Saved Views — persistent named view definitions (A1).
+ * Section 4: Subsets — LinkML subset definitions with editing UI (A4).
  */
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAppStore } from '../store/index.js';
 import { usePlatform } from '../platform/PlatformContext.js';
 import { buildManifestData, writeEditorManifest } from '../io/editorManifest.js';
@@ -46,11 +47,32 @@ export function ProjectPanel() {
   const deleteView = useAppStore((s) => s.deleteView);
   const duplicateView = useAppStore((s) => s.duplicateView);
   const selectedNodeIds = useAppStore((s) => s.selectedNodeIds);
+  const focusMode = useAppStore((s) => s.focusMode);
+  const setFocusMode = useAppStore((s) => s.setFocusMode);
+  const createSubset = useAppStore((s) => s.createSubset);
+  const renameSubset = useAppStore((s) => s.renameSubset);
+  const deleteSubset = useAppStore((s) => s.deleteSubset);
+  const addEntityToSubset = useAppStore((s) => s.addEntityToSubset);
   const [searchMode, setSearchMode] = useState(false);
   const [importsCollapsed, setImportsCollapsed] = useState(false);
   const [viewsCollapsed, setViewsCollapsed] = useState(false);
+  const [subsetsCollapsed, setSubsetsCollapsed] = useState(false);
   const [renamingViewId, setRenamingViewId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [renamingSubset, setRenamingSubset] = useState<string | null>(null);
+  const [subsetRenameValue, setSubsetRenameValue] = useState('');
+  const [newSubsetName, setNewSubsetName] = useState('');
+  const [addingSubset, setAddingSubset] = useState(false);
+
+  // Writable active schema — used for subset editing (read-only imports cannot own subsets)
+  const writableActiveSchemaFile = useMemo(
+    () => activeProject?.schemas.find((s) => s.id === activeSchemaId && !s.isReadOnly),
+    [activeProject, activeSchemaId]
+  );
+  const subsets = useMemo(
+    () => writableActiveSchemaFile ? Object.keys(writableActiveSchemaFile.schema.subsets) : [],
+    [writableActiveSchemaFile]
+  );
 
   const saveManifestWithViews = (nextViews: ViewDefinition[], nextActiveViewId: string | null) => {
     if (!activeProject?.rootPath) return;
@@ -133,6 +155,85 @@ export function ProjectPanel() {
   const handleSelectSchema = (schemaId: string) => {
     clearActiveEntity();
     setActiveSchema(schemaId);
+  };
+
+  // ── Subset handlers ────────────────────────────────────────────────────────
+
+  const handleActivateSubset = (subsetName: string) => {
+    const next = focusMode?.type === 'subset' && focusMode.subsetName === subsetName ? null : { type: 'subset' as const, subsetName };
+    setFocusMode(next);
+  };
+
+  const handleCreateSubset = () => {
+    const name = newSubsetName.trim();
+    if (!name || !writableActiveSchemaFile) return;
+    createSubset(writableActiveSchemaFile.id, name);
+    setNewSubsetName('');
+    setAddingSubset(false);
+    setRenamingSubset(name);
+    setSubsetRenameValue(name);
+  };
+
+  const handleCommitSubsetRename = (oldName: string) => {
+    const newName = subsetRenameValue.trim();
+    if (newName && newName !== oldName && writableActiveSchemaFile) {
+      renameSubset(writableActiveSchemaFile.id, oldName, newName);
+      if (focusMode?.type === 'subset' && focusMode.subsetName === oldName) {
+        setFocusMode({ type: 'subset', subsetName: newName });
+      }
+    }
+    setRenamingSubset(null);
+  };
+
+  const handleDeleteSubset = (e: React.MouseEvent, subsetName: string) => {
+    e.stopPropagation();
+    if (!writableActiveSchemaFile) return;
+    deleteSubset(writableActiveSchemaFile.id, subsetName);
+    if (focusMode?.type === 'subset' && focusMode.subsetName === subsetName) {
+      setFocusMode(null);
+    }
+  };
+
+  const handlePromoteViewToSubset = (e: React.MouseEvent, viewId: string) => {
+    e.stopPropagation();
+    const view = views.find((v) => v.id === viewId);
+    if (!view || !writableActiveSchemaFile) return;
+    // Promote only if all members live in the writable active schema
+    const sf = writableActiveSchemaFile;
+    const allInSchema = view.members.every((m) => m.schemaFilePath === sf.filePath);
+    if (!allInSchema) {
+      alert('Cannot promote: view members span multiple schemas. Ensure all members are in the active writable schema first.');
+      return;
+    }
+    // Create the subset and tag each member
+    createSubset(sf.id, view.name);
+    for (const member of view.members) {
+      if (member.kind === 'class' || member.kind === 'enum') {
+        addEntityToSubset(sf.id, member.name, view.name, member.kind);
+      }
+    }
+  };
+
+  const handleDemoteSubsetToView = (e: React.MouseEvent, subsetName: string) => {
+    e.stopPropagation();
+    if (!writableActiveSchemaFile) return;
+    const sf = writableActiveSchemaFile;
+    const schema = sf.schema;
+    // Collect all classes/enums tagged with this subset
+    const members: Array<{ schemaFilePath: string; name: string; kind: 'class' | 'enum' }> = [];
+    for (const [name, cls] of Object.entries(schema.classes)) {
+      if (cls.subsetOf?.includes(subsetName)) {
+        members.push({ schemaFilePath: sf.filePath, name, kind: 'class' });
+      }
+    }
+    for (const [name, enm] of Object.entries(schema.enums)) {
+      if (enm.subsetOf?.includes(subsetName)) {
+        members.push({ schemaFilePath: sf.filePath, name, kind: 'enum' });
+      }
+    }
+    const view = createView({ name: `${subsetName} (view)`, members });
+    setActiveViewId(view.id);
+    saveManifestWithViews([...views, view], view.id);
   };
 
   if (!activeProject) {
@@ -370,6 +471,15 @@ export function ProjectPanel() {
                         </button>
                         <button
                           type="button"
+                          style={styles.viewActionBtn}
+                          title="Promote to LinkML subset"
+                          onClick={(e) => handlePromoteViewToSubset(e, view.id)}
+                          disabled={!writableActiveSchemaFile}
+                        >
+                          ⬆
+                        </button>
+                        <button
+                          type="button"
                           style={{ ...styles.viewActionBtn, ...styles.viewDeleteBtn }}
                           title="Delete view"
                           onClick={(e) => handleDeleteView(e, view.id)}
@@ -386,6 +496,127 @@ export function ProjectPanel() {
         </>
       )}
 
+      {/* ── Subsets section (A4) ─────────────────────────────────────────────── */}
+      {!searchMode && (
+        <>
+          <button
+            type="button"
+            style={styles.importsSectionHeader}
+            onClick={() => setSubsetsCollapsed((c) => !c)}
+            title={subsetsCollapsed ? 'Expand subsets' : 'Collapse subsets'}
+          >
+            <span style={styles.chevron}>{subsetsCollapsed ? '▶' : '▼'}</span>
+            <span style={styles.sectionLabel}>Subsets</span>
+            <span style={styles.sectionCount}>{subsets.length}</span>
+            {writableActiveSchemaFile && (
+              <button
+                type="button"
+                style={styles.addViewBtn}
+                onClick={(e) => { e.stopPropagation(); setAddingSubset(true); setNewSubsetName(''); }}
+                title="Create a new LinkML subset"
+              >
+                +
+              </button>
+            )}
+          </button>
+
+          {!subsetsCollapsed && (
+            <div style={styles.viewsList}>
+              {addingSubset && (
+                <div style={styles.viewRow}>
+                  <input
+                    style={styles.viewRenameInput}
+                    value={newSubsetName}
+                    autoFocus
+                    placeholder="subset name…"
+                    onChange={(e) => setNewSubsetName(e.target.value)}
+                    onBlur={() => { if (!newSubsetName.trim()) setAddingSubset(false); else handleCreateSubset(); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleCreateSubset();
+                      if (e.key === 'Escape') { setAddingSubset(false); }
+                    }}
+                  />
+                </div>
+              )}
+              {subsets.length === 0 && !addingSubset ? (
+                <div style={styles.viewsEmpty}>
+                  {writableActiveSchemaFile
+                    ? 'No subsets — click + to create one'
+                    : 'Open a writable schema to edit subsets'}
+                </div>
+              ) : (
+                subsets.map((subsetName) => {
+                  const isActive = focusMode?.type === 'subset' && focusMode.subsetName === subsetName;
+                  return (
+                    <div
+                      key={subsetName}
+                      style={{
+                        ...styles.viewRow,
+                        ...(isActive ? styles.subsetRowActive : {}),
+                      }}
+                      onClick={() => handleActivateSubset(subsetName)}
+                      title={`LinkML subset: ${subsetName}`}
+                    >
+                      {renamingSubset === subsetName ? (
+                        <input
+                          style={styles.viewRenameInput}
+                          value={subsetRenameValue}
+                          autoFocus
+                          onChange={(e) => setSubsetRenameValue(e.target.value)}
+                          onBlur={() => handleCommitSubsetRename(subsetName)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleCommitSubsetRename(subsetName);
+                            if (e.key === 'Escape') setRenamingSubset(null);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <>
+                          <span style={styles.subsetIcon}>⊂</span>
+                          <span style={styles.viewName}>{subsetName}</span>
+                        </>
+                      )}
+                      {writableActiveSchemaFile && renamingSubset !== subsetName && (
+                        <div style={styles.viewActions}>
+                          <button
+                            type="button"
+                            style={styles.viewActionBtn}
+                            title="Rename subset"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRenamingSubset(subsetName);
+                              setSubsetRenameValue(subsetName);
+                            }}
+                          >
+                            ✎
+                          </button>
+                          <button
+                            type="button"
+                            style={styles.viewActionBtn}
+                            title="Demote to view (copy members into a new editor view)"
+                            onClick={(e) => handleDemoteSubsetToView(e, subsetName)}
+                          >
+                            ⬇
+                          </button>
+                          <button
+                            type="button"
+                            style={{ ...styles.viewActionBtn, ...styles.viewDeleteBtn }}
+                            title="Delete subset"
+                            onClick={(e) => handleDeleteSubset(e, subsetName)}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </>
+      )}
+
       {/* Footer */}
       {!searchMode && (
         <div style={styles.footer}>
@@ -393,6 +624,7 @@ export function ProjectPanel() {
             {localSchemas.length} file{localSchemas.length !== 1 ? 's' : ''}
             {importedSchemas.length > 0 && ` · ${importedSchemas.length} imported`}
             {views.length > 0 && ` · ${views.length} view${views.length !== 1 ? 's' : ''}`}
+            {subsets.length > 0 && ` · ${subsets.length} subset${subsets.length !== 1 ? 's' : ''}`}
           </span>
         </div>
       )}
@@ -707,5 +939,17 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '1px 4px',
     outline: 'none',
     minWidth: 0,
+  },
+  subsetRowActive: {
+    background: 'var(--color-bg-surface)',
+    borderLeft: '2px solid var(--color-state-success)',
+    paddingLeft: 8,
+  },
+  subsetIcon: {
+    fontSize: 11,
+    color: 'var(--color-state-success)',
+    flexShrink: 0,
+    marginRight: 3,
+    fontFamily: 'var(--font-family-mono)',
   },
 };
