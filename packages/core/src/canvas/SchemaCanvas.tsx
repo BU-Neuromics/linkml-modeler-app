@@ -350,8 +350,8 @@ function SchemaCanvasInner() {
   // Derive graph (with ghost nodes grouped by source schema)
   const { nodes: derivedNodes, edges: derivedEdges } = useMemo(() => {
     if (!activeSchemaFile) return { nodes: [], edges: [] };
-    return deriveGraph(activeSchemaFile.schema, { ...localLayout, labels: effectiveLabels }, {}, ghostEntities, collapsedGroups, allSchemaSlots);
-  }, [activeSchemaFile, ghostEntities, localLayout, effectiveLabels, collapsedGroups, allSchemaSlots]);
+    return deriveGraph(activeSchemaFile.schema, { ...localLayout, labels: effectiveLabels }, {}, ghostEntities, collapsedGroups, allSchemaSlots, hiddenEdgeTypes);
+  }, [activeSchemaFile, ghostEntities, localLayout, effectiveLabels, collapsedGroups, allSchemaSlots, hiddenEdgeTypes]);
 
   useEffect(() => {
     setNodes(derivedNodes);
@@ -366,12 +366,12 @@ function SchemaCanvasInner() {
     if (hasLayoutData) {
       void Promise.resolve(activeSchemaFile.canvasLayout).then(setLocalLayout);
     } else {
-      void runAutoLayout(activeSchemaFile.schema, {}, ghostEntities).then((layout) => {
+      void runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes).then((layout) => {
         setLocalLayout(layout);
         setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 100);
       });
     }
-  }, [activeSchemaFile, ghostEntities, fitView]);
+  }, [activeSchemaFile, ghostEntities, hiddenEdgeTypes, fitView]);
 
   useEffect(() => {
     layoutRanRef.current = false;
@@ -397,7 +397,7 @@ function SchemaCanvasInner() {
     if (!hasUnsaved) return;
 
     // Re-run auto-layout to incorporate the new ghost nodes
-    runAutoLayout(activeSchemaFile.schema, {}, ghostEntities).then((layout) => {
+    runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes).then((layout) => {
       // Merge: keep existing user-adjusted positions, add new ghost positions
       setLocalLayout((prev) => ({
         nodes: { ...layout.nodes, ...prev.nodes },
@@ -431,11 +431,11 @@ function SchemaCanvasInner() {
 
   const handleAutoLayout = useCallback(async () => {
     if (!activeSchemaFile) return;
-    const layout = await runAutoLayout(activeSchemaFile.schema, {}, ghostEntities);
+    const layout = await runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes);
     setLocalLayout(layout);
     setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 100);
     scheduleManifestWrite();
-  }, [activeSchemaFile, ghostEntities, fitView, scheduleManifestWrite]);
+  }, [activeSchemaFile, ghostEntities, hiddenEdgeTypes, fitView, scheduleManifestWrite]);
 
   // ── ReactFlow event handlers ──────────────────────────────────────────────
 
@@ -832,13 +832,13 @@ function SchemaCanvasInner() {
 
   const displayEdges = useMemo(() => {
     // Active view: only show edges where both endpoints are members
+    // Hidden edge types are already excluded from storeEdges by deriveGraph.
     if (activeViewMemberIds) {
       return storeEdges.filter(
-        (e) => (!e.type || !hiddenEdgeTypes.has(e.type)) &&
-          activeViewMemberIds.has(e.source) && activeViewMemberIds.has(e.target)
+        (e) => activeViewMemberIds.has(e.source) && activeViewMemberIds.has(e.target)
       );
     }
-    const filtered = storeEdges.filter((e) => !e.type || !hiddenEdgeTypes.has(e.type));
+    const filtered = storeEdges;
 
     // Selection (sticky) takes priority over hover
     let focusNodeId: string | null = null;
@@ -859,7 +859,7 @@ function SchemaCanvasInner() {
         data: { ...edge.data, dimmed: isDimmed },
       };
     });
-  }, [storeEdges, hiddenEdgeTypes, activeViewMemberIds, highlightOnHover, highlightOnSelection, hoveredNodeId, highlightPinnedNodeId, edgeNeighborMap]);
+  }, [storeEdges, activeViewMemberIds, highlightOnHover, highlightOnSelection, hoveredNodeId, highlightPinnedNodeId, edgeNeighborMap]);
 
   // Empty state
   if (!activeSchemaFile) {
