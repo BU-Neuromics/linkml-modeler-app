@@ -122,3 +122,47 @@ This session is also a stress-test of the newly-codified workflow:
 - ⏳ Squash-merge to `dev` (pending owner review).
 - ⏳ Stacked-PR retargeting (will exercise after first stack merge).
 - ⏳ `dev → main` promotion + CalVer tagging (when 2+ of these features land).
+
+## Update — 2026-05-19 afternoon
+
+Cleanup session immediately following the morning handoff. Six of the eight feature PRs landed on `dev`; the remaining two were closed as superseded.
+
+### Landed on `dev` (in merge order)
+
+| PR | Squash | Notes |
+|---|---|---|
+| #68 (B4) | `24e9933` | Clean merge; foundation for everything else (it removed `collapsedGroups` from `deriveGraph`). |
+| #69 (A1) | `cff4ceb` | Clean merge. |
+| #75 (C1) | `6e9e4ca` | Required 3 fixes before CI passed: (1) escape `"` in JSX text (`react/no-unescaped-entities`); (2) replace `setState`-in-`useEffect` with the React 19 "store previous value" pattern (`react-hooks/set-state-in-effect`); (3) coverage threshold was 19.01% < 20% on `src/editor/**` — added a focused CommandPalette smoke test that lifted file coverage from 2.2% → 70.3%. New test also surfaced a latent bug: `onKeyDown` was attached to both the overlay div and the input, so ArrowDown advanced `activeIndex` by 2 — fixed with `e.stopPropagation()` inside `handleKeyDown`. Also added a no-op `Element.prototype.scrollIntoView` polyfill to `setup.ts` (jsdom doesn't implement it). |
+| #70 (B0) | `989a9c0` | Retargeted to `dev`, clean merge. |
+| #71 (A3) | `41ae449` | Rebase wrinkle: the stacked branch carried the pre-squash commits of #69 and #70, which conflicted with their squashed counterparts on `dev`. Resolution: `git rebase --onto origin/dev <prior-stack-tip>` to keep only the commits unique to this PR. CI green after rebase. |
+| #72 (A2) | `c28c39b` | Same rebase pattern. Also needed an `eslint-disable` for the legitimate one-shot mount effect that auto-focuses the first outline row (same lint rule as #75 but a real one-time-init case, not a refactor target). After force-push, CI didn't auto-trigger — had to `gh pr close && gh pr reopen` to fire the `pull_request reopened` event. |
+
+### Closed as superseded
+
+| PR | Issue | Why closed |
+|---|---|---|
+| #73 (B2 — edge-type filters) | #64 still open | B2 was written against the pre-B4 `deriveGraph` signature with `collapsedGroups`. B4 removed that parameter entirely. Rebase produced unresolvable mechanical conflicts in `SchemaCanvas.tsx`, `autoLayout.ts`, `deriveGraph.ts` — `hiddenEdgeTypes` needs to be threaded through the post-B4 code as a new, independent concern. Reauthor the feature, don't merge the branch. |
+| #74 (B3 — hop-distance dimming) | #65 still open | Stacks on B2; same conflict and then some. |
+
+Both branches remain on the remote as a reference for whoever reauthors the features.
+
+### Workflow checklist (afternoon update)
+
+- ✅ Squash-merge to `dev` exercised six times.
+- ✅ Stacked-PR retargeting exercised (`gh pr edit <#> --base dev` plus `git rebase --onto` to drop pre-merged commits).
+- ✅ Force-push after rebase used `--force-with-lease` every time.
+- ⚠️ Discovered: CI does not always retrigger on a force-push to a retargeted PR; close+reopen is the reliable retrigger. Worth a CLAUDE.md mention if it recurs.
+- ⚠️ Discovered: the project's coverage threshold on `src/editor/**` is fragile — local `pnpm test` doesn't run with `--coverage`, so threshold misses only surface on CI. Adding smoke tests for new editor components is the right fix (vs. lowering the threshold).
+- ⏳ `dev → main` promotion + CalVer tagging — six new features now sit on `dev`, well over the 2-feature trigger. Next session should open a draft `release: v2026.05.20` (or whatever date) promotion PR for owner review.
+
+### Agent-stack restart readiness
+
+The handoff's "minimum bar" was #68 + #69 + #70 — all landed. `dev` is in good shape to restart agent-stack work. Remaining proposal items per `docs/proposals/large-schema-ux.md`:
+
+- **#60 (B1)** — Inline-Attribute Toggle for Range Edges (highest remaining priority).
+- **#62 (A4)** — First-class subsets support.
+- **#67 (C2)** — Tabular Bulk-Edit View.
+- **#64 (B2)** + **#65 (B3)** — reauthor against current `dev`.
+
+Per the morning notes: start fresh agent sessions, don't reuse paused ones (their CLAUDE.md cache predates the workflow rules).
