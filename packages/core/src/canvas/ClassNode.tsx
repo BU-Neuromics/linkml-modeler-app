@@ -2,6 +2,8 @@ import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import type { CanvasNodeData } from '../store/slices/canvasSlice.js';
 import type { ClassDefinition, SlotDefinition } from '../model/index.js';
+import type { RangeEdgesMode } from '../store/slices/uiSlice.js';
+import { useAppStore } from '../store/index.js';
 import { ArrowUp, Hexagon, Plus } from '../ui/icons/index.js';
 import { classSlotMidY } from './nodeGeometry.js';
 
@@ -11,6 +13,7 @@ export interface ResolvedSlot {
   hasUsageOverride?: boolean;   // true when slot_usage overrides exist for this slot
   inherited?: boolean;          // true when slot comes from is_a / mixin ancestor
   inheritedFrom?: string;       // name of the immediate ancestor that contributes this slot
+  rangeIsEntity?: boolean;      // true when range is a class or enum in the schema
 }
 
 export interface ClassNodeData extends CanvasNodeData {
@@ -19,12 +22,23 @@ export interface ClassNodeData extends CanvasNodeData {
   collapsed: boolean;
   ghost?: boolean; // True for read-only imported classes
   resolvedSlots?: ResolvedSlot[]; // Pre-merged, alphabetically sorted for display
+  rangeEdgesMode?: RangeEdgesMode; // Controls range rendering: show as edges, inline chips, or auto
 }
 
 const SLOT_LIMIT_EXPANDED = 20;
 
-function SlotRow({ resolved, isSelfRef }: { resolved: ResolvedSlot; isSelfRef?: boolean }) {
-  const { slot, kind, hasUsageOverride, inherited, inheritedFrom } = resolved;
+function SlotRow({
+  resolved,
+  isSelfRef,
+  showInlineRange,
+  onFocusRange,
+}: {
+  resolved: ResolvedSlot;
+  isSelfRef?: boolean;
+  showInlineRange?: boolean;
+  onFocusRange?: (rangeName: string) => void;
+}) {
+  const { slot, kind, hasUsageOverride, inherited, inheritedFrom, rangeIsEntity } = resolved;
   const badges: string[] = [];
   if (slot.required) badges.push('R');
   if (slot.multivalued) badges.push('M');
@@ -44,6 +58,8 @@ function SlotRow({ resolved, isSelfRef }: { resolved: ResolvedSlot; isSelfRef?: 
     ? { ...styles.slotRow, opacity: 0.55 }
     : styles.slotRow;
 
+  const renderRangeChip = showInlineRange && rangeIsEntity && slot.range && !isSelfRef;
+
   return (
     <div style={rowStyle} title={inherited && inheritedFrom ? `Inherited from ${inheritedFrom}` : undefined}>
       <span style={styles.slotPlus}><Plus size={10} /></span>
@@ -51,7 +67,17 @@ function SlotRow({ resolved, isSelfRef }: { resolved: ResolvedSlot; isSelfRef?: 
       {slot.range && (
         <>
           <span style={styles.slotColon}> : </span>
-          <span style={inherited ? styles.slotRangeInherited : styles.slotRange}>{slot.range}</span>
+          {renderRangeChip ? (
+            <button
+              style={inherited ? styles.rangeChipInherited : styles.rangeChip}
+              title={`Focus ${slot.range}`}
+              onClick={(e) => { e.stopPropagation(); onFocusRange?.(slot.range!); }}
+            >
+              {slot.range} →
+            </button>
+          ) : (
+            <span style={inherited ? styles.slotRangeInherited : styles.slotRange}>{slot.range}</span>
+          )}
         </>
       )}
       <span style={styles.badgeGroup}>
@@ -75,7 +101,10 @@ function SlotRow({ resolved, isSelfRef }: { resolved: ResolvedSlot; isSelfRef?: 
 }
 
 function ClassNode({ data, selected }: NodeProps<ClassNodeData>) {
-  const { classDef, collapsed, ghost, resolvedSlots: resolvedSlotsProp } = data;
+  const { classDef, collapsed, ghost, resolvedSlots: resolvedSlotsProp, rangeEdgesMode } = data;
+  const requestFocusNode = useAppStore((s) => s.requestFocusNode);
+
+  const showInlineRange = rangeEdgesMode === 'inline' || rangeEdgesMode === 'auto';
 
   const isAbstract = classDef.abstract === true;
   const isMixin = classDef.mixin === true;
@@ -151,7 +180,13 @@ function ClassNode({ data, selected }: NodeProps<ClassNodeData>) {
       {!collapsed && (
         <div style={styles.body}>
           {visibleSlots.map((r) => (
-            <SlotRow key={r.slot.name} resolved={r} isSelfRef={r.slot.range === data.entityId} />
+            <SlotRow
+              key={r.slot.name}
+              resolved={r}
+              isSelfRef={r.slot.range === data.entityId}
+              showInlineRange={showInlineRange}
+              onFocusRange={requestFocusNode}
+            />
           ))}
           {hiddenCount > 0 && (
             <div style={styles.moreRow}>+{hiddenCount} more…</div>
@@ -162,11 +197,12 @@ function ClassNode({ data, selected }: NodeProps<ClassNodeData>) {
         </div>
       )}
 
-      {/* Per-slot side handles for range edges — only when expanded.
+      {/* Per-slot side handles for range edges — only when expanded and not inlined.
           Added for each own (non-inherited) slot that declares a range.
           Both east and west handles exist; deriveGraph picks the side facing the target. */}
       {!collapsed && visibleSlots.map((r, i) => {
         if (r.inherited || !r.slot.range) return null;
+        if (showInlineRange && r.rangeIsEntity) return null; // handle suppressed when rendered inline
         const y = classSlotMidY(i, hasIsA);
         return (
           <React.Fragment key={r.slot.name}>
@@ -326,6 +362,44 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+  },
+  rangeChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 2,
+    fontSize: 11,
+    fontFamily: 'inherit',
+    background: 'var(--color-state-success-bg, rgba(34,197,94,0.12))',
+    color: 'var(--color-state-success-fg)',
+    border: '1px solid var(--color-state-success-fg)',
+    borderRadius: 3,
+    padding: '0 4px',
+    cursor: 'pointer',
+    flex: 1,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    maxWidth: '100%',
+    textAlign: 'left',
+  },
+  rangeChipInherited: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 2,
+    fontSize: 11,
+    fontFamily: 'inherit',
+    background: 'var(--color-bg-surface)',
+    color: 'var(--color-fg-muted)',
+    border: '1px solid var(--color-border-default)',
+    borderRadius: 3,
+    padding: '0 4px',
+    cursor: 'pointer',
+    flex: 1,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    maxWidth: '100%',
+    textAlign: 'left',
   },
   badgeGroup: {
     display: 'flex',
