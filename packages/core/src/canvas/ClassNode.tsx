@@ -17,7 +17,7 @@ export interface ClassNodeData extends CanvasNodeData {
   entityType: 'class';
   classDef: ClassDefinition;
   collapsed: boolean;
-  ghost?: boolean; // True for read-only imported classes
+  imported?: boolean; // True for read-only imported classes
   resolvedSlots?: ResolvedSlot[]; // Pre-merged, alphabetically sorted for display
 }
 
@@ -75,12 +75,12 @@ function SlotRow({ resolved, isSelfRef }: { resolved: ResolvedSlot; isSelfRef?: 
 }
 
 function ClassNode({ data, selected }: NodeProps<ClassNodeData>) {
-  const { classDef, collapsed, ghost, resolvedSlots: resolvedSlotsProp } = data;
+  const { classDef, collapsed, imported, resolvedSlots: resolvedSlotsProp } = data;
 
   const isAbstract = classDef.abstract === true;
   const isMixin = classDef.mixin === true;
 
-  const headerBg = ghost
+  const headerBg = imported
     ? 'var(--color-class-ghost)'
     : isMixin
     ? 'var(--color-class-mixin)'
@@ -88,7 +88,7 @@ function ClassNode({ data, selected }: NodeProps<ClassNodeData>) {
     ? 'var(--color-class-abstract)'
     : 'var(--color-class-concrete)';
 
-  const typeLabel = ghost ? 'imported' : isMixin ? 'mixin' : isAbstract ? 'abstract' : null;
+  const typeLabel = imported ? 'imported' : isMixin ? 'mixin' : isAbstract ? 'abstract' : null;
 
   // Fall back to plain attributes if resolvedSlots not provided (e.g. ghost nodes)
   const resolvedSlots: ResolvedSlot[] = resolvedSlotsProp ??
@@ -103,8 +103,8 @@ function ClassNode({ data, selected }: NodeProps<ClassNodeData>) {
     <div
       style={{
         ...styles.wrapper,
-        ...(ghost ? styles.ghostWrapper : {}),
-        outline: selected ? '2px solid var(--color-accent-hover)' : ghost ? '1px dashed var(--color-border-default)' : '1px solid var(--color-border-default)',
+        ...(imported ? styles.importedWrapper : {}),
+        outline: selected ? '2px solid var(--color-accent-hover)' : '1px solid var(--color-border-default)',
       }}
     >
       {/* Target handle (top) — for is_a / mixin / union_of edges pointing into this node */}
@@ -208,7 +208,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--color-fg-primary)',
     overflow: 'hidden',
   },
-  ghostWrapper: {
+  importedWrapper: {
     background: 'var(--color-class-ghost)',
     /* No opacity — token bg color provides distinction in both themes */
   },

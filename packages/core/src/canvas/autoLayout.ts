@@ -73,95 +73,54 @@ export async function runAutoLayout(
     ...Object.keys(schema.enums),
   ]);
 
-  // ── Add ghost entities as compound (group) nodes ──────────────────────────
-  const ghostGroups = new Map<string, ImportedEntity[]>();
+  // ── Add imported entities as flat leaf nodes ──────────────────────────────
+  const allImportedIds = new Set<string>();
   for (const entity of ghostEntities) {
     if (localIds.has(entity.name)) continue; // skip if local definition exists
-    const group = ghostGroups.get(entity.sourceFilePath) ?? [];
-    group.push(entity);
-    ghostGroups.set(entity.sourceFilePath, group);
-  }
-
-  const allGhostIds = new Set<string>();
-
-  for (const [sourceFile, entities] of ghostGroups) {
-    const groupId = `importGroup__${sourceFile}`;
-    const children: ElkNode[] = [];
-
-    for (const entity of entities) {
-      const ghostId = `ghost__${entity.name}`;
-      allGhostIds.add(ghostId);
-      children.push({
-        id: ghostId,
-        width: entity.type === 'class' ? CLASS_W : ENUM_W,
-        height: entity.type === 'class' ? CLASS_H : ENUM_H,
-      });
-    }
-
+    allImportedIds.add(entity.name);
     elkNodes.push({
-      id: groupId,
-      children,
-      layoutOptions: {
-        'elk.algorithm': 'layered',
-        'elk.direction': options.direction,
-        'elk.spacing.nodeNode': '20',
-        'elk.padding': '[top=52,left=16,bottom=16,right=16]',
-      },
+      id: entity.name,
+      width: entity.type === 'class' ? CLASS_W : ENUM_W,
+      height: entity.type === 'class' ? CLASS_H : ENUM_H,
     });
   }
 
   // All known IDs for edge validation
-  const allIds = new Set([...localIds, ...allGhostIds]);
+  const allIds = new Set([...localIds, ...allImportedIds]);
 
   // ── Add edges from class relationships ────────────────────────────────────
   for (const [className, classDef] of Object.entries(schema.classes)) {
     // is_a — feed ELK with parent as source so it lays the parent above the child
-    if (classDef.isA) {
-      const targetId = allIds.has(classDef.isA)
-        ? classDef.isA
-        : allGhostIds.has(`ghost__${classDef.isA}`)
-        ? `ghost__${classDef.isA}`
-        : null;
-      if (targetId) {
-        addEdge(elkEdges, edgeSeen, `isa__${className}__${classDef.isA}`, targetId, className);
-      }
+    if (classDef.isA && allIds.has(classDef.isA)) {
+      addEdge(elkEdges, edgeSeen, `isa__${className}__${classDef.isA}`, classDef.isA, className);
     }
 
     // mixins — same reversal so mixin parents render above children
     for (const m of classDef.mixins) {
-      const targetId = allIds.has(m) ? m : allGhostIds.has(`ghost__${m}`) ? `ghost__${m}` : null;
-      if (targetId) {
-        addEdge(elkEdges, edgeSeen, `mixin__${className}__${m}`, targetId, className);
+      if (allIds.has(m)) {
+        addEdge(elkEdges, edgeSeen, `mixin__${className}__${m}`, m, className);
       }
     }
 
     // union_of
     if (classDef.unionOf) {
       for (const u of classDef.unionOf) {
-        const targetId = allIds.has(u) ? u : allGhostIds.has(`ghost__${u}`) ? `ghost__${u}` : null;
-        if (targetId) {
-          addEdge(elkEdges, edgeSeen, `union__${className}__${u}`, className, targetId);
+        if (allIds.has(u)) {
+          addEdge(elkEdges, edgeSeen, `union__${className}__${u}`, className, u);
         }
       }
     }
 
     // range edges
     for (const [slotName, slot] of Object.entries(classDef.attributes)) {
-      if (!slot.range) continue;
-      const targetId = localIds.has(slot.range)
-        ? slot.range
-        : allGhostIds.has(`ghost__${slot.range}`)
-        ? `ghost__${slot.range}`
-        : null;
-      if (targetId) {
-        addEdge(
-          elkEdges,
-          edgeSeen,
-          `range__${className}__${slotName}__${slot.range}`,
-          className,
-          targetId
-        );
-      }
+      if (!slot.range || !allIds.has(slot.range)) continue;
+      addEdge(
+        elkEdges,
+        edgeSeen,
+        `range__${className}__${slotName}__${slot.range}`,
+        className,
+        slot.range
+      );
     }
   }
 
@@ -174,8 +133,6 @@ export async function runAutoLayout(
       'elk.spacing.nodeNode': String(options.nodeNodeSpacing),
       'elk.layered.spacing.nodeNodeBetweenLayers': String(options.layerSpacing),
       'elk.edgeRouting': 'ORTHOGONAL',
-      // Route cross-hierarchy edges (to ghost nodes inside compound groups) in root frame
-      'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
     },
     children: elkNodes,
     edges: elkEdges,
@@ -204,8 +161,7 @@ function addEdge(
 }
 
 /**
- * Recursively extract absolute positions from ELK result, including children
- * of compound (group) nodes. Also captures per-edge bend points.
+ * Extract absolute positions from ELK result. Also captures per-edge bend points.
  */
 function elkResultToLayout(elkNode: ElkNode): CanvasLayout {
   const layout: CanvasLayout = {
@@ -214,22 +170,18 @@ function elkResultToLayout(elkNode: ElkNode): CanvasLayout {
     viewport: { x: 0, y: 0, zoom: 1 },
   };
 
-  function extractPositions(node: ElkNode, offsetX: number, offsetY: number, insideGroup: boolean) {
+  function extractPositions(node: ElkNode, offsetX: number, offsetY: number) {
     for (const child of node.children ?? []) {
-      const relX = child.x ?? 0;
-      const relY = child.y ?? 0;
-      const absX = relX + offsetX;
-      const absY = relY + offsetY;
-      // Ghost children (inside import groups) save relative positions so they move
-      // with the group when it is dragged. All other nodes save absolute positions.
-      layout.nodes[child.id] = insideGroup ? { x: relX, y: relY } : { x: absX, y: absY };
+      const absX = (child.x ?? 0) + offsetX;
+      const absY = (child.y ?? 0) + offsetY;
+      layout.nodes[child.id] = { x: absX, y: absY };
       if (child.children?.length) {
-        extractPositions(child, absX, absY, true);
+        extractPositions(child, absX, absY);
       }
     }
   }
 
-  extractPositions(elkNode, 0, 0, false);
+  extractPositions(elkNode, 0, 0);
 
   // Extract bend points from routed edges (only intermediate points; start/end
   // are discarded in favour of ReactFlow's live handle coordinates).

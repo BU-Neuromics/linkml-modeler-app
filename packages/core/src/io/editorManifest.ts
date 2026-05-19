@@ -128,6 +128,39 @@ export function buildManifestData(
 }
 
 /**
+ * Migrates a node-position map from the old ghost__/importGroup__ key format
+ * to the new flat format (bare entity names).
+ *
+ * Rules (idempotent):
+ *   - `ghost__<name>` → `<name>` (existing `<name>` entry wins on collision)
+ *   - `importGroup__*` → dropped (compound group nodes no longer exist)
+ */
+function migrateNodeKeys(
+  nodes: Record<string, { x: number; y: number; collapsed?: boolean }>
+): Record<string, { x: number; y: number; collapsed?: boolean }> {
+  const result: Record<string, { x: number; y: number; collapsed?: boolean }> = {};
+
+  // First pass: copy non-ghost, non-importGroup entries
+  for (const [key, value] of Object.entries(nodes)) {
+    if (!key.startsWith('ghost__') && !key.startsWith('importGroup__')) {
+      result[key] = value;
+    }
+  }
+
+  // Second pass: promote ghost__ entries (existing plain-name entries win)
+  for (const [key, value] of Object.entries(nodes)) {
+    if (key.startsWith('ghost__')) {
+      const name = key.slice('ghost__'.length);
+      if (!(name in result)) {
+        result[name] = value;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * Applies manifest data to a list of schema files, updating `canvasLayout` in
  * place (returns new SchemaFile objects — does not mutate). Also returns the
  * set of schema IDs that should be hidden.
@@ -147,8 +180,10 @@ export function applyManifestToSchemas(
 
     if (!entry.layout) return sf;
 
+    const migratedNodes = migrateNodeKeys(entry.layout.nodes ?? {});
+
     const canvasLayout: CanvasLayout = {
-      nodes: entry.layout.nodes ?? {},
+      nodes: migratedNodes,
       viewport: entry.layout.viewport ?? { x: 0, y: 0, zoom: 1 },
       ...(entry.layout.labels?.length ? { labels: entry.layout.labels } : {}),
     };
