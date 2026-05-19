@@ -416,6 +416,8 @@ function App() {
       if (!window.confirm('You have unsaved changes. Close project without saving?')) return;
     }
     closeProject();
+    useAppStore.getState().setViews([]);
+    useAppStore.getState().setActiveViewId(null);
     useAppStore.getState().setGitAvailable(false);
   }, [isDirty, closeProject]);
 
@@ -751,6 +753,8 @@ async function bootstrap() {
       /** Close the active project (returns to splash). */
       closeProject() {
         useAppStore.getState().closeProject();
+        useAppStore.getState().setViews([]);
+        useAppStore.getState().setActiveViewId(null);
       },
     };
 
