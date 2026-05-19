@@ -42,7 +42,8 @@ const DEFAULT_OPTIONS: Required<AutoLayoutOptions> = {
 export async function runAutoLayout(
   schema: LinkMLSchema,
   opts: AutoLayoutOptions = {},
-  ghostEntities: ImportedEntity[] = []
+  ghostEntities: ImportedEntity[] = [],
+  hiddenEdgeTypes: ReadonlySet<string> = new Set()
 ): Promise<CanvasLayout> {
   const options = { ...DEFAULT_OPTIONS, ...opts };
 
@@ -116,7 +117,7 @@ export async function runAutoLayout(
   // ── Add edges from class relationships ────────────────────────────────────
   for (const [className, classDef] of Object.entries(schema.classes)) {
     // is_a — feed ELK with parent as source so it lays the parent above the child
-    if (classDef.isA) {
+    if (!hiddenEdgeTypes.has('is_a') && classDef.isA) {
       const targetId = allIds.has(classDef.isA)
         ? classDef.isA
         : allGhostIds.has(`ghost__${classDef.isA}`)
@@ -128,15 +129,17 @@ export async function runAutoLayout(
     }
 
     // mixins — same reversal so mixin parents render above children
-    for (const m of classDef.mixins) {
-      const targetId = allIds.has(m) ? m : allGhostIds.has(`ghost__${m}`) ? `ghost__${m}` : null;
-      if (targetId) {
-        addEdge(elkEdges, edgeSeen, `mixin__${className}__${m}`, targetId, className);
+    if (!hiddenEdgeTypes.has('mixin')) {
+      for (const m of classDef.mixins) {
+        const targetId = allIds.has(m) ? m : allGhostIds.has(`ghost__${m}`) ? `ghost__${m}` : null;
+        if (targetId) {
+          addEdge(elkEdges, edgeSeen, `mixin__${className}__${m}`, targetId, className);
+        }
       }
     }
 
     // union_of
-    if (classDef.unionOf) {
+    if (!hiddenEdgeTypes.has('union_of') && classDef.unionOf) {
       for (const u of classDef.unionOf) {
         const targetId = allIds.has(u) ? u : allGhostIds.has(`ghost__${u}`) ? `ghost__${u}` : null;
         if (targetId) {
@@ -146,21 +149,23 @@ export async function runAutoLayout(
     }
 
     // range edges
-    for (const [slotName, slot] of Object.entries(classDef.attributes)) {
-      if (!slot.range) continue;
-      const targetId = localIds.has(slot.range)
-        ? slot.range
-        : allGhostIds.has(`ghost__${slot.range}`)
-        ? `ghost__${slot.range}`
-        : null;
-      if (targetId) {
-        addEdge(
-          elkEdges,
-          edgeSeen,
-          `range__${className}__${slotName}__${slot.range}`,
-          className,
-          targetId
-        );
+    if (!hiddenEdgeTypes.has('range')) {
+      for (const [slotName, slot] of Object.entries(classDef.attributes)) {
+        if (!slot.range) continue;
+        const targetId = localIds.has(slot.range)
+          ? slot.range
+          : allGhostIds.has(`ghost__${slot.range}`)
+          ? `ghost__${slot.range}`
+          : null;
+        if (targetId) {
+          addEdge(
+            elkEdges,
+            edgeSeen,
+            `range__${className}__${slotName}__${slot.range}`,
+            className,
+            targetId
+          );
+        }
       }
     }
   }
