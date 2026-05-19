@@ -248,6 +248,8 @@ function SchemaCanvasInner() {
   const storeEdges = useAppStore((s) => s.edges);
   const viewport = useAppStore((s) => s.viewport);
   const focusMode = useAppStore((s) => s.focusMode);
+  const views = useAppStore((s) => s.views);
+  const activeViewId = useAppStore((s) => s.activeViewId);
   const focusNodeRequest = useAppStore((s) => s.focusNodeRequest);
   const requestFocusNode = useAppStore((s) => s.requestFocusNode);
   const hiddenSchemaIds = useAppStore((s) => s.hiddenSchemaIds);
@@ -287,11 +289,11 @@ function SchemaCanvasInner() {
 
   // Refs for manifest writing — always up to date, no closure staleness
   const localLayoutRef = useRef(localLayout);
-  const manifestWriteStateRef = useRef({ activeProject, activeSchemaId, hiddenSchemaIds, platform });
+  const manifestWriteStateRef = useRef({ activeProject, activeSchemaId, hiddenSchemaIds, platform, views, activeViewId });
   const manifestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useLayoutEffect(() => {
-    manifestWriteStateRef.current = { activeProject, activeSchemaId, hiddenSchemaIds, platform };
-  }, [activeProject, activeSchemaId, hiddenSchemaIds, platform]);
+    manifestWriteStateRef.current = { activeProject, activeSchemaId, hiddenSchemaIds, platform, views, activeViewId };
+  }, [activeProject, activeSchemaId, hiddenSchemaIds, platform, views, activeViewId]);
 
   // Save layout to store when active schema changes (before the new schema loads)
   const prevActiveSchemaIdRef = useRef<string | null>(null);
@@ -420,9 +422,9 @@ function SchemaCanvasInner() {
   const scheduleManifestWrite = useCallback(() => {
     if (manifestTimerRef.current) clearTimeout(manifestTimerRef.current);
     manifestTimerRef.current = setTimeout(() => {
-      const { activeProject, activeSchemaId, hiddenSchemaIds, platform } = manifestWriteStateRef.current;
+      const { activeProject, activeSchemaId, hiddenSchemaIds, platform, views, activeViewId } = manifestWriteStateRef.current;
       if (!activeProject?.rootPath) return;
-      const manifest = buildManifestData(activeProject, activeSchemaId, localLayoutRef.current, hiddenSchemaIds);
+      const manifest = buildManifestData(activeProject, activeSchemaId, localLayoutRef.current, hiddenSchemaIds, views, activeViewId);
       writeEditorManifest(platform, activeProject.rootPath, manifest);
     }, 1000);
   }, []);
@@ -758,7 +760,20 @@ function SchemaCanvasInner() {
     return map;
   }, [storeEdges]);
 
-  // Focus mode dimming
+  // Active view member set — node IDs from the view that belong to the current active schema
+  const activeViewMemberIds = useMemo<Set<string> | null>(() => {
+    if (!activeViewId) return null;
+    const view = views.find((v) => v.id === activeViewId);
+    if (!view || !activeSchemaFile) return null;
+    const schemaFilePath = activeSchemaFile.filePath;
+    const ids = new Set<string>();
+    for (const m of view.members) {
+      if (m.schemaFilePath === schemaFilePath) ids.add(m.name);
+    }
+    return ids;
+  }, [activeViewId, views, activeSchemaFile]);
+
+  // Focus mode dimming (ephemeral — separate from persistent views)
   const visibleNodeIds = useMemo<Set<string> | null>(() => {
     if (!focusMode) return null;
     if (focusMode.type === 'selection') return new Set(focusMode.nodeIds);
@@ -773,6 +788,11 @@ function SchemaCanvasInner() {
   }, [focusMode, activeSchemaFile]);
 
   const displayNodes: Node[] = useMemo(() => {
+    // Active view: hard-filter to only members (completely remove non-members)
+    if (activeViewMemberIds) {
+      return storeNodes.filter((n) => activeViewMemberIds.has(n.id));
+    }
+    // Focus mode: dim non-members (soft filter)
     if (!visibleNodeIds) return storeNodes;
     return storeNodes.map((n) => ({
       ...n,
@@ -780,9 +800,16 @@ function SchemaCanvasInner() {
         ? n.style
         : { ...n.style, opacity: 0.3, pointerEvents: 'none' as const },
     }));
-  }, [storeNodes, visibleNodeIds]);
+  }, [storeNodes, activeViewMemberIds, visibleNodeIds]);
 
   const displayEdges = useMemo(() => {
+    // Active view: only show edges where both endpoints are members
+    if (activeViewMemberIds) {
+      return storeEdges.filter(
+        (e) => (!e.type || !hiddenEdgeTypes.has(e.type)) &&
+          activeViewMemberIds.has(e.source) && activeViewMemberIds.has(e.target)
+      );
+    }
     const filtered = storeEdges.filter((e) => !e.type || !hiddenEdgeTypes.has(e.type));
 
     // Selection (sticky) takes priority over hover
@@ -804,7 +831,7 @@ function SchemaCanvasInner() {
         data: { ...edge.data, dimmed: isDimmed },
       };
     });
-  }, [storeEdges, hiddenEdgeTypes, highlightOnHover, highlightOnSelection, hoveredNodeId, highlightPinnedNodeId, edgeNeighborMap]);
+  }, [storeEdges, hiddenEdgeTypes, activeViewMemberIds, highlightOnHover, highlightOnSelection, hoveredNodeId, highlightPinnedNodeId, edgeNeighborMap]);
 
   // Empty state
   if (!activeSchemaFile) {
@@ -962,6 +989,24 @@ function SchemaCanvasInner() {
         </div>
       )}
 
+      {/* Active view banner */}
+      {activeViewId && (() => {
+        const view = views.find((v) => v.id === activeViewId);
+        if (!view) return null;
+        const memberCount = activeViewMemberIds?.size ?? 0;
+        return (
+          <div style={styles.viewBanner}>
+            <span>View: <strong>{view.name}</strong> · {memberCount} member{memberCount !== 1 ? 's' : ''}</span>
+            <button
+              style={styles.focusExitBtn}
+              onClick={() => { useAppStore.getState().setActiveViewId(null); scheduleManifestWrite(); }}
+            >
+              Exit view
+            </button>
+          </div>
+        );
+      })()}
+
       {/* Context menu */}
       {contextMenu && (
         <CanvasContextMenu
@@ -1082,6 +1127,24 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     fontFamily: 'var(--font-family-mono)',
     color: 'var(--color-state-info-fg)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    zIndex: 10,
+    boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+  },
+  viewBanner: {
+    position: 'absolute',
+    top: 12,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    background: 'var(--color-bg-surface)',
+    border: '1px solid var(--color-border-strong)',
+    borderRadius: 6,
+    padding: '6px 14px',
+    fontSize: 12,
+    fontFamily: 'var(--font-family-mono)',
+    color: 'var(--color-fg-primary)',
     display: 'flex',
     alignItems: 'center',
     gap: 10,

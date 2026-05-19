@@ -416,6 +416,8 @@ function App() {
       if (!window.confirm('You have unsaved changes. Close project without saving?')) return;
     }
     closeProject();
+    useAppStore.getState().setViews([]);
+    useAppStore.getState().setActiveViewId(null);
     useAppStore.getState().setGitAvailable(false);
   }, [isDirty, closeProject]);
 
@@ -708,10 +710,12 @@ async function bootstrap() {
       },
       /** Scan an OPFS directory for LinkML schemas and open as project. */
       async openProjectFromPath(dirPath: string) {
-        const { project, hiddenSchemaIds } = await openProjectFromDirectory(dirPath, platformRef.current);
+        const { project, hiddenSchemaIds, views, activeViewId } = await openProjectFromDirectory(dirPath, platformRef.current);
         if (project.schemas.length > 0) {
           useAppStore.getState().setProject(project);
           useAppStore.getState().setHiddenSchemaIds(hiddenSchemaIds);
+          useAppStore.getState().setViews(views);
+          useAppStore.getState().setActiveViewId(activeViewId);
         }
       },
       /** Set the active project's rootPath so Ctrl+S writes to OPFS directly. */
@@ -749,6 +753,8 @@ async function bootstrap() {
       /** Close the active project (returns to splash). */
       closeProject() {
         useAppStore.getState().closeProject();
+        useAppStore.getState().setViews([]);
+        useAppStore.getState().setActiveViewId(null);
       },
     };
 
