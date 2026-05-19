@@ -42,6 +42,13 @@ import { collectReferencedImportedEntities } from '../io/importResolver.js';
 import { buildManifestData, writeEditorManifest } from '../io/editorManifest.js';
 import type { CanvasLayout, TextLabel } from '../model/index.js';
 import { emptyClassDefinition, emptyEnumDefinition } from '../model/index.js';
+import {
+  buildAdjacency,
+  getAncestors,
+  getDescendants,
+  getDirectNeighbors,
+  applyOp,
+} from './selectionOps.js';
 
 // ── CSS token reader (for SVG/canvas contexts that require concrete color values) ──
 function cssToken(name: string): string {
@@ -250,6 +257,7 @@ function SchemaCanvasInner() {
   const hiddenSchemaIds = useAppStore((s) => s.hiddenSchemaIds);
   const updateCanvasLayout = useAppStore((s) => s.updateCanvasLayout);
   const setSelection = useAppStore((s) => s.setSelection);
+  const selectedNodeIds = useAppStore((s) => s.selectedNodeIds);
   const setActiveEntity = useAppStore((s) => s.setActiveEntity);
   const clearActiveEntity = useAppStore((s) => s.clearActiveEntity);
   const activeEntity = useAppStore((s) => s.activeEntity);
@@ -739,10 +747,34 @@ function SchemaCanvasInner() {
         setSelection(storeNodes.map((n) => n.id), []);
         return;
       }
+
+      // A3 selection neighborhood shortcuts (only when selection is non-empty)
+      if (selectedNodeIds.length > 0 && !e.ctrlKey && !e.metaKey) {
+        if (e.key === 'n' || e.key === 'N' || e.key === 'a' || e.key === 'A' || e.key === 'd' || e.key === 'D') {
+          const sf = activeProject?.schemas.find((s) => s.id === activeSchemaId);
+          if (sf) {
+            const ghosts = collectReferencedImportedEntities(sf, activeProject!.schemas);
+            const kbGhostNames = new Set(ghosts.map((g) => g.name));
+            const adj = buildAdjacency(sf.schema, kbGhostNames);
+            const additive = e.shiftKey;
+            e.preventDefault();
+            let newIds: string[];
+            if (e.key === 'n' || e.key === 'N') {
+              newIds = applyOp(selectedNodeIds, kbGhostNames, (s) => getDirectNeighbors(adj, s, 'both'), additive);
+            } else if (e.key === 'a' || e.key === 'A') {
+              newIds = applyOp(selectedNodeIds, kbGhostNames, (s) => getAncestors(adj, s), additive);
+            } else {
+              newIds = applyOp(selectedNodeIds, kbGhostNames, (s) => getDescendants(adj, s), additive);
+            }
+            setSelection(newIds, []);
+            return;
+          }
+        }
+      }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeEntity, clearActiveEntity, fitView, isReadOnly, storeNodes, setSelection, activeSchemaId, deleteLabelFromCanvas]);
+  }, [activeEntity, clearActiveEntity, fitView, isReadOnly, storeNodes, setSelection, selectedNodeIds, activeSchemaId, activeProject, deleteLabelFromCanvas]);
 
   // Memoized adjacency map: nodeId → Set of connected edge IDs (for O(1) highlight lookup)
   const edgeNeighborMap = useMemo(() => {
