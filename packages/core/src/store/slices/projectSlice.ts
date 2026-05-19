@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import type { Project, SchemaFile, LinkMLSchema, ClassDefinition, SlotDefinition, EnumDefinition, PermissibleValue, CanvasLayout, GitConfig, TextLabel } from '../../model/index.js';
+import type { Project, SchemaFile, LinkMLSchema, ClassDefinition, SlotDefinition, EnumDefinition, PermissibleValue, CanvasLayout, GitConfig, TextLabel, SubsetDefinition } from '../../model/index.js';
 import { findMissingImport, resolveImportPath } from '../../io/importResolver.js';
 import { addRecentProject } from '../../project/recentProjects.js';
 
@@ -61,6 +61,16 @@ export interface ProjectSlice {
   addPermissibleValue(schemaId: string, enumName: string, value: PermissibleValue): void;
   updatePermissibleValue(schemaId: string, enumName: string, valueText: string, partial: Partial<PermissibleValue>): void;
   deletePermissibleValue(schemaId: string, enumName: string, valueText: string): void;
+
+  // ── Subset mutations (A4) ─────────────────────────────────────────────────────
+  createSubset(schemaId: string, name: string, description?: string): void;
+  /** Rename a subset; cascades the rename across every entity's subsetOf array. */
+  renameSubset(schemaId: string, oldName: string, newName: string): void;
+  /** Delete a subset; removes the name from every entity's subsetOf array. */
+  deleteSubset(schemaId: string, name: string): void;
+  addEntityToSubset(schemaId: string, entityName: string, subsetName: string, kind: 'class' | 'enum' | 'slot'): void;
+  removeEntityFromSubset(schemaId: string, entityName: string, subsetName: string, kind: 'class' | 'enum' | 'slot'): void;
+  updateSubset(schemaId: string, name: string, partial: Partial<Omit<SubsetDefinition, 'name'>>): void;
 
   // ── Git config ────────────────────────────────────────────────────────────────
   /** Update git configuration fields on the active project. */
@@ -728,6 +738,197 @@ export const createProjectSlice: StateCreator<ProjectSlice, [], [], ProjectSlice
               [enumName]: { ...enumDef, permissibleValues: rest },
             },
           };
+        }),
+      };
+    });
+  },
+
+  // ── Subset mutations (A4) ─────────────────────────────────────────────────────
+
+  createSubset(schemaId, name, description) {
+    set((state) => {
+      if (!state.activeProject) return state;
+      return {
+        activeProject: patchSchema(state.activeProject, schemaId, (s) => {
+          if (s.subsets[name]) return s;
+          const def: SubsetDefinition = { name, ...(description ? { description } : {}) };
+          return { ...s, subsets: { ...s.subsets, [name]: def } };
+        }),
+      };
+    });
+  },
+
+  renameSubset(schemaId, oldName, newName) {
+    if (!oldName || !newName || oldName === newName) return;
+    set((state) => {
+      if (!state.activeProject) return state;
+      return {
+        activeProject: patchSchema(state.activeProject, schemaId, (s) => {
+          if (!s.subsets[oldName] || s.subsets[newName]) return s;
+          const { [oldName]: existing, ...rest } = s.subsets;
+          const renamed = { ...existing, name: newName };
+          // Cascade rename across classes
+          const classes: LinkMLSchema['classes'] = {};
+          for (const [cn, cls] of Object.entries(s.classes)) {
+            classes[cn] = cls.subsetOf?.includes(oldName)
+              ? { ...cls, subsetOf: cls.subsetOf.map((n) => (n === oldName ? newName : n)) }
+              : cls;
+          }
+          // Cascade across schema-level slots
+          const slots: LinkMLSchema['slots'] = {};
+          for (const [sn, slot] of Object.entries(s.slots)) {
+            slots[sn] = slot.subsetOf?.includes(oldName)
+              ? { ...slot, subsetOf: slot.subsetOf.map((n) => (n === oldName ? newName : n)) }
+              : slot;
+          }
+          // Cascade across enums
+          const enums: LinkMLSchema['enums'] = {};
+          for (const [en, enm] of Object.entries(s.enums)) {
+            enums[en] = enm.subsetOf?.includes(oldName)
+              ? { ...enm, subsetOf: enm.subsetOf.map((n) => (n === oldName ? newName : n)) }
+              : enm;
+          }
+          return { ...s, subsets: { ...rest, [newName]: renamed }, classes, slots, enums };
+        }),
+      };
+    });
+  },
+
+  deleteSubset(schemaId, name) {
+    set((state) => {
+      if (!state.activeProject) return state;
+      return {
+        activeProject: patchSchema(state.activeProject, schemaId, (s) => {
+          if (!s.subsets[name]) return s;
+          const { [name]: _removed, ...rest } = s.subsets;
+          // Cascade removal across classes
+          const classes: LinkMLSchema['classes'] = {};
+          for (const [cn, cls] of Object.entries(s.classes)) {
+            classes[cn] = cls.subsetOf?.includes(name)
+              ? { ...cls, subsetOf: cls.subsetOf.filter((n) => n !== name).length > 0
+                  ? cls.subsetOf.filter((n) => n !== name)
+                  : undefined }
+              : cls;
+          }
+          // Cascade across schema-level slots
+          const slots: LinkMLSchema['slots'] = {};
+          for (const [sn, slot] of Object.entries(s.slots)) {
+            slots[sn] = slot.subsetOf?.includes(name)
+              ? { ...slot, subsetOf: slot.subsetOf.filter((n) => n !== name).length > 0
+                  ? slot.subsetOf.filter((n) => n !== name)
+                  : undefined }
+              : slot;
+          }
+          // Cascade across enums
+          const enums: LinkMLSchema['enums'] = {};
+          for (const [en, enm] of Object.entries(s.enums)) {
+            enums[en] = enm.subsetOf?.includes(name)
+              ? { ...enm, subsetOf: enm.subsetOf.filter((n) => n !== name).length > 0
+                  ? enm.subsetOf.filter((n) => n !== name)
+                  : undefined }
+              : enm;
+          }
+          return { ...s, subsets: rest, classes, slots, enums };
+        }),
+      };
+    });
+  },
+
+  addEntityToSubset(schemaId, entityName, subsetName, kind) {
+    set((state) => {
+      if (!state.activeProject) return state;
+      return {
+        activeProject: patchSchema(state.activeProject, schemaId, (s) => {
+          if (kind === 'class') {
+            const cls = s.classes[entityName];
+            if (!cls || cls.subsetOf?.includes(subsetName)) return s;
+            return {
+              ...s,
+              classes: {
+                ...s.classes,
+                [entityName]: { ...cls, subsetOf: [...(cls.subsetOf ?? []), subsetName] },
+              },
+            };
+          }
+          if (kind === 'enum') {
+            const enm = s.enums[entityName];
+            if (!enm || enm.subsetOf?.includes(subsetName)) return s;
+            return {
+              ...s,
+              enums: {
+                ...s.enums,
+                [entityName]: { ...enm, subsetOf: [...(enm.subsetOf ?? []), subsetName] },
+              },
+            };
+          }
+          // kind === 'slot' (schema-level slot)
+          const slot = s.slots[entityName];
+          if (!slot || slot.subsetOf?.includes(subsetName)) return s;
+          return {
+            ...s,
+            slots: {
+              ...s.slots,
+              [entityName]: { ...slot, subsetOf: [...(slot.subsetOf ?? []), subsetName] },
+            },
+          };
+        }),
+      };
+    });
+  },
+
+  removeEntityFromSubset(schemaId, entityName, subsetName, kind) {
+    set((state) => {
+      if (!state.activeProject) return state;
+      return {
+        activeProject: patchSchema(state.activeProject, schemaId, (s) => {
+          if (kind === 'class') {
+            const cls = s.classes[entityName];
+            if (!cls?.subsetOf?.includes(subsetName)) return s;
+            const next = cls.subsetOf.filter((n) => n !== subsetName);
+            return {
+              ...s,
+              classes: {
+                ...s.classes,
+                [entityName]: { ...cls, subsetOf: next.length > 0 ? next : undefined },
+              },
+            };
+          }
+          if (kind === 'enum') {
+            const enm = s.enums[entityName];
+            if (!enm?.subsetOf?.includes(subsetName)) return s;
+            const next = enm.subsetOf.filter((n) => n !== subsetName);
+            return {
+              ...s,
+              enums: {
+                ...s.enums,
+                [entityName]: { ...enm, subsetOf: next.length > 0 ? next : undefined },
+              },
+            };
+          }
+          // kind === 'slot'
+          const slot = s.slots[entityName];
+          if (!slot?.subsetOf?.includes(subsetName)) return s;
+          const next = slot.subsetOf.filter((n) => n !== subsetName);
+          return {
+            ...s,
+            slots: {
+              ...s.slots,
+              [entityName]: { ...slot, subsetOf: next.length > 0 ? next : undefined },
+            },
+          };
+        }),
+      };
+    });
+  },
+
+  updateSubset(schemaId, name, partial) {
+    set((state) => {
+      if (!state.activeProject) return state;
+      return {
+        activeProject: patchSchema(state.activeProject, schemaId, (s) => {
+          const existing = s.subsets[name];
+          if (!existing) return s;
+          return { ...s, subsets: { ...s.subsets, [name]: { ...existing, ...partial } } };
         }),
       };
     });
