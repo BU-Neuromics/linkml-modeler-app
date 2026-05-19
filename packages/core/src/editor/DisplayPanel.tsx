@@ -45,6 +45,9 @@ export function DisplayPanel() {
   const highlightOnSelection = useAppStore((s) => s.highlightOnSelection);
   const setHighlightOnHover = useAppStore((s) => s.setHighlightOnHover);
   const setHighlightOnSelection = useAppStore((s) => s.setHighlightOnSelection);
+  const globalRenderMode = useAppStore((s) => s.globalRenderMode);
+  const setGlobalRenderMode = useAppStore((s) => s.setGlobalRenderMode);
+  const updateView = useAppStore((s) => s.updateView);
 
   // A3: Selection state and schema info
   const selectedNodeIds = useAppStore((s) => s.selectedNodeIds);
@@ -56,8 +59,21 @@ export function DisplayPanel() {
   const views = useAppStore((s) => s.views);
   const createView = useAppStore((s) => s.createView);
   const setActiveViewId = useAppStore((s) => s.setActiveViewId);
+  const activeViewId = useAppStore((s) => s.activeViewId);
 
   const [nHop, setNHop] = useState(1);
+
+  // Compute effective render mode: active view wins over global default
+  const activeView = views.find((v) => v.id === activeViewId) ?? null;
+  const activeRenderMode: 'canvas' | 'outline' = activeView ? activeView.renderMode : globalRenderMode;
+
+  function setRenderMode(mode: 'canvas' | 'outline') {
+    if (activeView) {
+      updateView(activeView.id, { renderMode: mode });
+    } else {
+      setGlobalRenderMode(mode);
+    }
+  }
 
   // Ghost entity names for node-ID bridging
   const ghostEntityNames = useMemo((): ReadonlySet<string> => {
@@ -109,6 +125,37 @@ export function DisplayPanel() {
     <div id="lme-display-panel" style={styles.panel}>
       <div style={styles.header}>
         <span style={styles.headerTitle}>Display</span>
+      </div>
+
+      {/* A2: Rendering mode switcher */}
+      <div style={styles.section}>
+        <div style={styles.sectionHeader}>Rendering</div>
+        <div style={styles.sectionBody}>
+          <button
+            id="lme-display-mode-canvas"
+            style={{
+              ...styles.toggleBtn,
+              borderColor: activeRenderMode === 'canvas' ? 'var(--color-accent-hover)' : 'var(--color-border-default)',
+              color: activeRenderMode === 'canvas' ? 'var(--color-accent-hover)' : 'var(--color-fg-muted)',
+            }}
+            onClick={() => setRenderMode('canvas')}
+            title="ERD canvas rendering mode"
+          >
+            canvas
+          </button>
+          <button
+            id="lme-display-mode-outline"
+            style={{
+              ...styles.toggleBtn,
+              borderColor: activeRenderMode === 'outline' ? 'var(--color-accent-hover)' : 'var(--color-border-default)',
+              color: activeRenderMode === 'outline' ? 'var(--color-accent-hover)' : 'var(--color-fg-muted)',
+            }}
+            onClick={() => setRenderMode('outline')}
+            title="Collapsible outline/tree rendering mode"
+          >
+            outline
+          </button>
+        </div>
       </div>
 
       {/* Edge Filters */}
