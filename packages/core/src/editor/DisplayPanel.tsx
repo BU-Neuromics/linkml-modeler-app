@@ -14,7 +14,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import { useAppStore } from '../store/index.js';
-import { collectReferencedImportedEntities } from '../io/importResolver.js';
+import { collectReferencedImportedEntities, type ImportedEntity } from '../io/importResolver.js';
 import { usePlatform } from '../platform/PlatformContext.js';
 import { buildManifestData, writeEditorManifest } from '../io/editorManifest.js';
 import {
@@ -52,6 +52,8 @@ export function DisplayPanel() {
   const hopDimmingN = useAppStore((s) => s.hopDimmingN);
   const setHopDimmingEnabled = useAppStore((s) => s.setHopDimmingEnabled);
   const setHopDimmingN = useAppStore((s) => s.setHopDimmingN);
+  const groupByImportSource = useAppStore((s) => s.groupByImportSource);
+  const setGroupByImportSource = useAppStore((s) => s.setGroupByImportSource);
 
   // A3: Selection state and schema info
   const selectedNodeIds = useAppStore((s) => s.selectedNodeIds);
@@ -80,11 +82,30 @@ export function DisplayPanel() {
   }
 
   // Ghost entity names for node-ID bridging
-  const ghostEntityNames = useMemo((): ReadonlySet<string> => {
-    if (!activeSchemaFile || !activeProject) return new Set();
-    const entities = collectReferencedImportedEntities(activeSchemaFile, activeProject.schemas);
-    return new Set(entities.map((e) => e.name));
+  const ghostEntities = useMemo((): ImportedEntity[] => {
+    if (!activeSchemaFile || !activeProject) return [];
+    return collectReferencedImportedEntities(activeSchemaFile, activeProject.schemas);
   }, [activeSchemaFile, activeProject]);
+
+  const ghostEntityNames = useMemo(
+    (): ReadonlySet<string> => new Set(ghostEntities.map((e) => e.name)),
+    [ghostEntities]
+  );
+
+  // D1: Import groups for Clustering section
+  const importGroups = useMemo(() => {
+    const groups = new Map<string, ImportedEntity[]>();
+    for (const entity of ghostEntities) {
+      const group = groups.get(entity.sourceFilePath) ?? [];
+      group.push(entity);
+      groups.set(entity.sourceFilePath, group);
+    }
+    return [...groups.entries()].map(([sourceFilePath, members]) => ({
+      sourceFilePath,
+      label: sourceFilePath.split('/').pop()?.replace(/\.ya?ml$/, '') ?? sourceFilePath,
+      members,
+    }));
+  }, [ghostEntities]);
 
   // Adjacency built from the active schema
   const adj = useMemo(() => {
@@ -117,6 +138,23 @@ export function DisplayPanel() {
       });
     if (members.length === 0) return;
     const view = createView({ name: `View ${views.length + 1}`, members });
+    const nextViews = [...views, view];
+    setActiveViewId(view.id);
+    if (activeProject.rootPath) {
+      const manifest = buildManifestData(activeProject, null, null, hiddenSchemaIds, nextViews, view.id);
+      writeEditorManifest(platform, activeProject.rootPath, manifest).catch(() => {});
+    }
+  }
+
+  function saveGroupAsView(sourceFilePath: string, entities: ImportedEntity[]) {
+    if (!activeProject || !activeSchemaFile || entities.length === 0) return;
+    const members = entities.map((entity) => ({
+      schemaFilePath: entity.sourceFilePath,
+      name: entity.name,
+      kind: entity.type as 'class' | 'enum',
+    }));
+    const label = sourceFilePath.split('/').pop()?.replace(/\.ya?ml$/, '') ?? 'Import Group';
+    const view = createView({ name: label, members });
     const nextViews = [...views, view];
     setActiveViewId(view.id);
     if (activeProject.rootPath) {
@@ -404,7 +442,36 @@ export function DisplayPanel() {
         </div>
       </div>
 
-      {/* D1: Clustering — placeholder */}
+      {/* D1: Clustering */}
+      <div style={styles.section}>
+        <div style={styles.sectionHeader}>Clustering</div>
+        <div style={styles.sectionBody}>
+          <button
+            id="lme-display-group-by-import"
+            style={{
+              ...styles.toggleBtn,
+              borderColor: groupByImportSource ? 'var(--color-accent-hover)' : 'var(--color-border-default)',
+              color: groupByImportSource ? 'var(--color-accent-hover)' : 'var(--color-fg-muted)',
+            }}
+            onClick={() => setGroupByImportSource(!groupByImportSource)}
+            title={`${groupByImportSource ? 'Ungroup' : 'Group'} imported nodes by source schema`}
+          >
+            {groupByImportSource ? 'grouped' : 'flat'}
+          </button>
+          {groupByImportSource && importGroups.map(({ sourceFilePath, label, members }) => (
+            <div key={sourceFilePath} style={styles.importGroupRow}>
+              <span style={styles.importGroupLabel} title={sourceFilePath}>{label}</span>
+              <button
+                style={styles.importGroupSaveBtn}
+                title={`Save "${label}" as a view`}
+                onClick={() => saveGroupAsView(sourceFilePath, members)}
+              >
+                save view
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -497,5 +564,31 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'var(--font-family-mono)',
     cursor: 'pointer',
     textAlign: 'center' as const,
+  },
+  importGroupRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+  },
+  importGroupLabel: {
+    flex: 1,
+    fontSize: 10,
+    fontFamily: 'var(--font-family-mono)',
+    color: 'var(--color-fg-secondary)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+    minWidth: 0,
+  },
+  importGroupSaveBtn: {
+    flexShrink: 0,
+    background: 'var(--color-bg-surface)',
+    border: '1px solid var(--color-border-default)',
+    borderRadius: 4,
+    padding: '2px 5px',
+    fontSize: 10,
+    fontFamily: 'var(--font-family-mono)',
+    cursor: 'pointer',
+    color: 'var(--color-fg-muted)',
   },
 };

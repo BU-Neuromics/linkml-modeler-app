@@ -163,7 +163,8 @@ export function deriveGraph(
   ghostEntities: ImportedEntity[] = [],
   collapsedGroups: Record<string, boolean> = {},
   allSchemaSlots: Record<string, SlotDefinition> = {},
-  hiddenEdgeTypes: ReadonlySet<string> = new Set()
+  hiddenEdgeTypes: ReadonlySet<string> = new Set(),
+  groupByImportSource: boolean = false
 ): DerivedGraph {
   const nodes: Node<CanvasNodeData>[] = [];
   const edges: Edge[] = [];
@@ -357,7 +358,7 @@ export function deriveGraph(
     });
   }
 
-  // ── Ghost nodes (imported entities grouped by source schema) ───────────────
+  // ── Ghost nodes (imported entities, optionally grouped by source schema) ─────
   const existingIds = new Set(nodes.map((n) => n.id));
 
   // Group ghost entities by source file path
@@ -375,110 +376,160 @@ export function deriveGraph(
   // Track all ghost IDs for edge creation
   const allGhostIds = new Set<string>();
 
-  for (const [sourceFile, entities] of ghostGroups) {
-    const groupId = `importGroup__${sourceFile}`;
-    const isGroupCollapsed = collapsedGroups[groupId] ?? false;
+  if (groupByImportSource) {
+    // ── Grouped mode: wrap ghost entities in ImportGroupNode containers ──────
+    for (const [sourceFile, entities] of ghostGroups) {
+      const groupId = `importGroup__${sourceFile}`;
+      const isGroupCollapsed = collapsedGroups[groupId] ?? false;
 
-    // Group's absolute position (saved directly, not derived from children)
-    const groupPos = layout.nodes[groupId] ?? gridPosition(gridIndex++);
+      // Group's absolute position (saved directly, not derived from children)
+      const groupPos = layout.nodes[groupId] ?? gridPosition(gridIndex++);
 
-    // Compute children with RELATIVE positions (relative to group top-left).
-    // Saved layout stores ghost positions as relative; defaults use the inner grid.
-    const childEntries: Array<{
-      ghostId: string;
-      entity: ImportedEntity;
-      relX: number;
-      relY: number;
-      w: number;
-      h: number;
-    }> = [];
+      // Compute children with RELATIVE positions (relative to group top-left).
+      // Saved layout stores ghost positions as relative; defaults use the inner grid.
+      const childEntries: Array<{
+        ghostId: string;
+        entity: ImportedEntity;
+        relX: number;
+        relY: number;
+        w: number;
+        h: number;
+      }> = [];
 
-    let maxRelX = 0;
-    let maxRelY = GROUP_HEADER + GROUP_PADDING;
+      let maxRelX = 0;
+      let maxRelY = GROUP_HEADER + GROUP_PADDING;
 
-    for (let i = 0; i < entities.length; i++) {
-      const entity = entities[i];
-      const ghostId = `ghost__${entity.name}`;
-      const w = entity.type === 'class' ? CLASS_NODE_WIDTH : ENUM_NODE_WIDTH;
-      const h = entity.type === 'class' ? CLASS_NODE_HEIGHT : ENUM_NODE_HEIGHT;
+      for (let i = 0; i < entities.length; i++) {
+        const entity = entities[i];
+        const ghostId = `ghost__${entity.name}`;
+        const w = entity.type === 'class' ? CLASS_NODE_WIDTH : ENUM_NODE_WIDTH;
+        const h = entity.type === 'class' ? CLASS_NODE_HEIGHT : ENUM_NODE_HEIGHT;
 
-      // Saved position is relative to the group
-      const savedPos = layout.nodes[ghostId];
-      const relX = savedPos?.x ?? groupChildPosition(i).x;
-      const relY = savedPos?.y ?? groupChildPosition(i).y;
+        // Saved position is relative to the group
+        const savedPos = layout.nodes[ghostId];
+        const relX = savedPos?.x ?? groupChildPosition(i).x;
+        const relY = savedPos?.y ?? groupChildPosition(i).y;
 
-      childEntries.push({ ghostId, entity, relX, relY, w, h });
-      maxRelX = Math.max(maxRelX, relX + w);
-      maxRelY = Math.max(maxRelY, relY + h);
+        childEntries.push({ ghostId, entity, relX, relY, w, h });
+        maxRelX = Math.max(maxRelX, relX + w);
+        maxRelY = Math.max(maxRelY, relY + h);
+      }
+
+      const groupWidth = maxRelX + GROUP_PADDING;
+      const expandedHeight = maxRelY + GROUP_PADDING;
+      const collapsedHeight = GROUP_HEADER + GROUP_PADDING;
+
+      // Create group background node (inserted at beginning for lower z-index)
+      const groupData: ImportGroupNodeData = {
+        entityId: groupId,
+        entityType: 'importGroup',
+        label: labelFromPath(sourceFile),
+        sourceFilePath: sourceFile,
+        collapsed: isGroupCollapsed,
+        childCount: entities.length,
+      };
+
+      nodes.unshift({
+        id: groupId,
+        type: 'importGroupNode',
+        position: { x: groupPos.x, y: groupPos.y },
+        data: groupData as unknown as CanvasNodeData,
+        style: {
+          width: groupWidth,
+          height: isGroupCollapsed ? collapsedHeight : expandedHeight,
+        },
+        zIndex: -1,
+        draggable: true,
+        selectable: true,
+      });
+
+      // Only add child nodes when the group is expanded.
+      // Children use parentId so they move with the group and positions are relative.
+      if (!isGroupCollapsed) {
+        for (const child of childEntries) {
+          existingIds.add(child.ghostId);
+          allGhostIds.add(child.ghostId);
+
+          if (child.entity.type === 'class') {
+            const nodeData: ClassNodeData = {
+              entityId: child.entity.name,
+              entityType: 'class',
+              classDef: child.entity.schema.classes[child.entity.name],
+              collapsed: false,
+              ghost: true,
+            };
+            nodes.push({
+              id: child.ghostId,
+              type: 'classNode',
+              parentId: groupId,
+              expandParent: false,
+              position: { x: child.relX, y: child.relY },
+              data: nodeData as unknown as CanvasNodeData,
+              width: CLASS_NODE_WIDTH,
+              height: CLASS_NODE_HEIGHT,
+            });
+          } else {
+            const nodeData: EnumNodeData = {
+              entityId: child.entity.name,
+              entityType: 'enum',
+              enumDef: child.entity.schema.enums[child.entity.name],
+              collapsed: false,
+              ghost: true,
+            };
+            nodes.push({
+              id: child.ghostId,
+              type: 'enumNode',
+              parentId: groupId,
+              expandParent: false,
+              position: { x: child.relX, y: child.relY },
+              data: nodeData as unknown as CanvasNodeData,
+              width: ENUM_NODE_WIDTH,
+              height: ENUM_NODE_HEIGHT,
+            });
+          }
+        }
+      }
     }
+  } else {
+    // ── Flat mode: ghost entities rendered as plain nodes without containers ──
+    let ghostIndex = 0;
+    for (const entities of ghostGroups.values()) {
+      for (const entity of entities) {
+        const ghostId = `ghost__${entity.name}`;
+        existingIds.add(ghostId);
+        allGhostIds.add(ghostId);
 
-    const groupWidth = maxRelX + GROUP_PADDING;
-    const expandedHeight = maxRelY + GROUP_PADDING;
-    const collapsedHeight = GROUP_HEADER + GROUP_PADDING;
+        // Flat mode: layout stores absolute positions
+        const pos = layout.nodes[ghostId] ?? gridPosition(gridIndex + ghostIndex++);
 
-    // Create group background node (inserted at beginning for lower z-index)
-    const groupData: ImportGroupNodeData = {
-      entityId: groupId,
-      entityType: 'importGroup',
-      label: labelFromPath(sourceFile),
-      sourceFilePath: sourceFile,
-      collapsed: isGroupCollapsed,
-      childCount: entities.length,
-    };
-
-    nodes.unshift({
-      id: groupId,
-      type: 'importGroupNode',
-      position: { x: groupPos.x, y: groupPos.y },
-      data: groupData as unknown as CanvasNodeData,
-      style: {
-        width: groupWidth,
-        height: isGroupCollapsed ? collapsedHeight : expandedHeight,
-      },
-      zIndex: -1,
-      draggable: true,
-      selectable: true,
-    });
-
-    // Only add child nodes when the group is expanded.
-    // Children use parentId so they move with the group and positions are relative.
-    if (!isGroupCollapsed) {
-      for (const child of childEntries) {
-        existingIds.add(child.ghostId);
-        allGhostIds.add(child.ghostId);
-
-        if (child.entity.type === 'class') {
+        if (entity.type === 'class') {
           const nodeData: ClassNodeData = {
-            entityId: child.entity.name,
+            entityId: entity.name,
             entityType: 'class',
-            classDef: child.entity.schema.classes[child.entity.name],
+            classDef: entity.schema.classes[entity.name],
             collapsed: false,
             ghost: true,
           };
           nodes.push({
-            id: child.ghostId,
+            id: ghostId,
             type: 'classNode',
-            parentId: groupId,
-            expandParent: false,
-            position: { x: child.relX, y: child.relY },
+            position: { x: pos.x, y: pos.y },
             data: nodeData as unknown as CanvasNodeData,
             width: CLASS_NODE_WIDTH,
             height: CLASS_NODE_HEIGHT,
           });
         } else {
           const nodeData: EnumNodeData = {
-            entityId: child.entity.name,
+            entityId: entity.name,
             entityType: 'enum',
-            enumDef: child.entity.schema.enums[child.entity.name],
+            enumDef: entity.schema.enums[entity.name],
             collapsed: false,
             ghost: true,
           };
           nodes.push({
-            id: child.ghostId,
+            id: ghostId,
             type: 'enumNode',
-            parentId: groupId,
-            expandParent: false,
-            position: { x: child.relX, y: child.relY },
+            position: { x: pos.x, y: pos.y },
             data: nodeData as unknown as CanvasNodeData,
             width: ENUM_NODE_WIDTH,
             height: ENUM_NODE_HEIGHT,

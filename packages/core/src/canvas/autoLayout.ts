@@ -43,7 +43,8 @@ export async function runAutoLayout(
   schema: LinkMLSchema,
   opts: AutoLayoutOptions = {},
   ghostEntities: ImportedEntity[] = [],
-  hiddenEdgeTypes: ReadonlySet<string> = new Set()
+  hiddenEdgeTypes: ReadonlySet<string> = new Set(),
+  groupByImportSource: boolean = false
 ): Promise<CanvasLayout> {
   const options = { ...DEFAULT_OPTIONS, ...opts };
 
@@ -74,7 +75,7 @@ export async function runAutoLayout(
     ...Object.keys(schema.enums),
   ]);
 
-  // ── Add ghost entities as compound (group) nodes ──────────────────────────
+  // ── Add ghost entities as nodes (compound if grouped, flat otherwise) ─────
   const ghostGroups = new Map<string, ImportedEntity[]>();
   for (const entity of ghostEntities) {
     if (localIds.has(entity.name)) continue; // skip if local definition exists
@@ -85,30 +86,45 @@ export async function runAutoLayout(
 
   const allGhostIds = new Set<string>();
 
-  for (const [sourceFile, entities] of ghostGroups) {
-    const groupId = `importGroup__${sourceFile}`;
-    const children: ElkNode[] = [];
+  if (groupByImportSource) {
+    for (const [sourceFile, entities] of ghostGroups) {
+      const groupId = `importGroup__${sourceFile}`;
+      const children: ElkNode[] = [];
 
-    for (const entity of entities) {
-      const ghostId = `ghost__${entity.name}`;
-      allGhostIds.add(ghostId);
-      children.push({
-        id: ghostId,
-        width: entity.type === 'class' ? CLASS_W : ENUM_W,
-        height: entity.type === 'class' ? CLASS_H : ENUM_H,
+      for (const entity of entities) {
+        const ghostId = `ghost__${entity.name}`;
+        allGhostIds.add(ghostId);
+        children.push({
+          id: ghostId,
+          width: entity.type === 'class' ? CLASS_W : ENUM_W,
+          height: entity.type === 'class' ? CLASS_H : ENUM_H,
+        });
+      }
+
+      elkNodes.push({
+        id: groupId,
+        children,
+        layoutOptions: {
+          'elk.algorithm': 'layered',
+          'elk.direction': options.direction,
+          'elk.spacing.nodeNode': '20',
+          'elk.padding': '[top=52,left=16,bottom=16,right=16]',
+        },
       });
     }
-
-    elkNodes.push({
-      id: groupId,
-      children,
-      layoutOptions: {
-        'elk.algorithm': 'layered',
-        'elk.direction': options.direction,
-        'elk.spacing.nodeNode': '20',
-        'elk.padding': '[top=52,left=16,bottom=16,right=16]',
-      },
-    });
+  } else {
+    // Flat mode: add each ghost entity as a regular top-level ELK node
+    for (const entities of ghostGroups.values()) {
+      for (const entity of entities) {
+        const ghostId = `ghost__${entity.name}`;
+        allGhostIds.add(ghostId);
+        elkNodes.push({
+          id: ghostId,
+          width: entity.type === 'class' ? CLASS_W : ENUM_W,
+          height: entity.type === 'class' ? CLASS_H : ENUM_H,
+        });
+      }
+    }
   }
 
   // All known IDs for edge validation

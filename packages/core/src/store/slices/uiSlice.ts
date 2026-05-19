@@ -14,6 +14,15 @@ export interface Toast {
 const HIDDEN_EDGE_TYPES_KEY = 'linkml-editor-hidden-edge-types';
 const HIGHLIGHT_SETTINGS_KEY = 'linkml-editor-highlight-settings';
 const HOP_DIMMING_KEY = 'linkml-editor-hop-dimming';
+const GROUP_BY_IMPORT_SOURCE_KEY = 'linkml-editor-group-by-import-source';
+
+function loadGroupByImportSource(): boolean {
+  try {
+    const raw = localStorage.getItem(GROUP_BY_IMPORT_SOURCE_KEY);
+    if (raw) return JSON.parse(raw) === true;
+  } catch { /* ignore */ }
+  return false;
+}
 
 function loadHopDimming(): { enabled: boolean; n: number } {
   try {
@@ -80,6 +89,8 @@ export interface UISlice {
   hopDimmingEnabled: boolean;
   /** Number of hops within which nodes/edges are kept at full opacity (B3). */
   hopDimmingN: number;
+  /** Whether ghost (imported) nodes are grouped by their source schema file (D1). Off by default. */
+  groupByImportSource: boolean;
 
   // Actions
   setTheme(theme: Theme): void;
@@ -99,6 +110,7 @@ export interface UISlice {
   setGlobalRenderMode(mode: 'canvas' | 'outline'): void;
   setHopDimmingEnabled(value: boolean): void;
   setHopDimmingN(n: number): void;
+  setGroupByImportSource(value: boolean): void;
 }
 
 let toastCounter = 0;
@@ -117,6 +129,7 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   globalRenderMode: 'canvas',
   hopDimmingEnabled: loadHopDimming().enabled,
   hopDimmingN: loadHopDimming().n,
+  groupByImportSource: loadGroupByImportSource(),
 
   setTheme(theme) {
     set({ theme });
@@ -201,5 +214,10 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
       try { localStorage.setItem(HOP_DIMMING_KEY, JSON.stringify({ enabled: state.hopDimmingEnabled, n: clamped })); } catch { /* ignore */ }
       return { hopDimmingN: clamped };
     });
+  },
+
+  setGroupByImportSource(value) {
+    try { localStorage.setItem(GROUP_BY_IMPORT_SOURCE_KEY, JSON.stringify(value)); } catch { /* ignore */ }
+    set({ groupByImportSource: value });
   },
 });

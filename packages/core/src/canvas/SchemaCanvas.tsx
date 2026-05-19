@@ -268,6 +268,7 @@ function SchemaCanvasInner() {
   const highlightOnSelection = useAppStore((s) => s.highlightOnSelection);
   const hopDimmingEnabled = useAppStore((s) => s.hopDimmingEnabled);
   const hopDimmingN = useAppStore((s) => s.hopDimmingN);
+  const groupByImportSource = useAppStore((s) => s.groupByImportSource);
 
   // Schema mutations
   const addClass = useAppStore((s) => s.addClass);
@@ -351,11 +352,10 @@ function SchemaCanvasInner() {
     return merged;
   }, [activeProject?.schemas]);
 
-  // Derive graph (with ghost nodes grouped by source schema)
   const { nodes: derivedNodes, edges: derivedEdges } = useMemo(() => {
     if (!activeSchemaFile) return { nodes: [], edges: [] };
-    return deriveGraph(activeSchemaFile.schema, { ...localLayout, labels: effectiveLabels }, {}, ghostEntities, collapsedGroups, allSchemaSlots, hiddenEdgeTypes);
-  }, [activeSchemaFile, ghostEntities, localLayout, effectiveLabels, collapsedGroups, allSchemaSlots, hiddenEdgeTypes]);
+    return deriveGraph(activeSchemaFile.schema, { ...localLayout, labels: effectiveLabels }, {}, ghostEntities, collapsedGroups, allSchemaSlots, hiddenEdgeTypes, groupByImportSource);
+  }, [activeSchemaFile, ghostEntities, localLayout, effectiveLabels, collapsedGroups, allSchemaSlots, hiddenEdgeTypes, groupByImportSource]);
 
   useEffect(() => {
     setNodes(derivedNodes);
@@ -370,7 +370,7 @@ function SchemaCanvasInner() {
     if (hasLayoutData) {
       void Promise.resolve(activeSchemaFile.canvasLayout).then(setLocalLayout);
     } else {
-      void runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes).then((layout) => {
+      void runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes, groupByImportSource).then((layout) => {
         setLocalLayout(layout);
         setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 100);
       });
@@ -401,7 +401,7 @@ function SchemaCanvasInner() {
     if (!hasUnsaved) return;
 
     // Re-run auto-layout to incorporate the new ghost nodes
-    runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes).then((layout) => {
+    runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes, groupByImportSource).then((layout) => {
       // Merge: keep existing user-adjusted positions, add new ghost positions
       setLocalLayout((prev) => ({
         nodes: { ...layout.nodes, ...prev.nodes },
@@ -409,7 +409,7 @@ function SchemaCanvasInner() {
       }));
       setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 150);
     });
-  }, [activeSchemaFile, ghostEntities, fitView]);
+  }, [activeSchemaFile, ghostEntities, hiddenEdgeTypes, groupByImportSource, fitView]);
 
   // Zoom to node when a focus request is pending
   useEffect(() => {
