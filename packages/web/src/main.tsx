@@ -53,6 +53,7 @@ import {
   OpenSchemaFromUrlDialog,
   ImportSchemaDialog,
   NewSchemaDialog,
+  CommandPalette,
   createNewProject,
   loadDemoSchemaFromUrl,
   openProjectFromDirectory,
@@ -439,6 +440,19 @@ function App() {
     return () => window.removeEventListener('keydown', handleSaveShortcut);
   }, [saveProject]);
 
+  // ── Cmd+K / Ctrl+K — command palette ──────────────────────────────────────
+  React.useEffect(() => {
+    function handlePaletteShortcut(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        const s = useAppStore.getState();
+        s.setCommandPaletteOpen(!s.commandPaletteOpen);
+      }
+    }
+    window.addEventListener('keydown', handlePaletteShortcut);
+    return () => window.removeEventListener('keydown', handlePaletteShortcut);
+  }, []);
+
   // Show splash page when no project is loaded
   if (!activeProject) {
     return (
@@ -584,6 +598,9 @@ function App() {
       {switchProjectDialogOpen && (
         <ProjectSwitcherDialog onClose={() => setSwitchProjectDialogOpen(false)} />
       )}
+
+      {/* Command palette (Cmd-K / Ctrl-K) — portal, renders even when closed */}
+      <CommandPalette />
 
       {/* Toast notifications */}
       <ToastList />

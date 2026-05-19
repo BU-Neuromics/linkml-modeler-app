@@ -10,3 +10,4 @@ export { OpenSchemaFromUrlDialog } from './OpenSchemaFromUrlDialog.js';
 export { ImportSchemaDialog } from './ImportSchemaDialog.js';
 export { NewSchemaDialog } from './NewSchemaDialog.js';
 export { EntitySearchPanel } from './EntitySearchPanel.js';
+export { CommandPalette } from './CommandPalette.js';
