@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { ClassDefinition, SlotDefinition, LinkMLSchema } from '../../model/index.js';
 import { useAppStore } from '../../store/index.js';
+import { SubsetMembershipEditor } from './SubsetMembershipEditor.js';
 import { FieldRow, TextInput, TextArea, Checkbox, FilteredGroupedSelect } from '../../ui/fields/index.js';
 import { inputStyle } from '../../ui/fields/TextInput.js';
 import { AlertTriangle, X } from '../../ui/icons/index.js';
@@ -329,6 +330,8 @@ export function ClassPanel({ schemaId, className }: { schemaId: string; classNam
           + Add Rule
         </button>
       </div>
+
+      <SubsetMembershipEditor schemaId={schemaId} entityName={className} kind="class" />
 
       <SectionHeader title="Actions" />
       <div style={styles.actionsRow}>

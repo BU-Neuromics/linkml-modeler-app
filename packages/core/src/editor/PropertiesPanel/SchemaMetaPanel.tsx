@@ -276,6 +276,7 @@ export function SchemaMetaPanel({ schemaId }: { schemaId: string }) {
           key={slot.name}
           slot={slot}
           schemaSlots={schema.slots ?? {}}
+          schemaId={schemaId}
           rangeOptionGroups={rangeOptionGroups}
           onUpdate={(partial) => updateSchemaSlot(schemaId, slot.name, partial)}
           onDelete={() => deleteSchemaSlot(schemaId, slot.name)}

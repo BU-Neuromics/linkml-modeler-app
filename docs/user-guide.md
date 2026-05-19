@@ -113,13 +113,60 @@ A **project** is a collection of related schema files sharing a namespace hierar
 
 ---
 
+## Saved Views
+
+A **view** is an editor-only filter that pins a named list of entities on the canvas — useful for working on a specific slice of a large schema without changing the schema itself.
+
+- **Create a view** — select nodes on the canvas, then click **+** in the Views section of the Project Panel.
+- **Activate a view** — click its name in the Project Panel; the canvas shows only those entities.
+- **Rename / duplicate / delete** — use the action icons on the right of each view row.
+- **Promote to subset** — click ⬆ on a view row to convert it into a schema-level LinkML `subset:` definition (writes `in_subset` tags on each member entity). Only available when all members are in the active writable schema.
+
+---
+
+## LinkML Subsets
+
+**Subsets** are a first-class LinkML concept (`subsets:` in the YAML) that group entities by domain or concern. The editor provides full editing support for subsets, listed in the **Subsets** section of the Project Panel.
+
+### Viewing and focussing subsets
+
+- Click a subset name in the Project Panel to enter **Subset Focus** — only entities tagged with that subset are shown on the canvas. Click again to exit.
+
+### Creating and editing subsets
+
+- Click **+** in the Subsets section header to create a new subset.
+- Click **✎** on a subset row to rename it (all `in_subset` references cascade automatically).
+- Click **×** to delete a subset (all `in_subset` references are removed).
+
+### Managing entity membership
+
+**In the Properties Panel** (right sidebar):
+- Select a class or enum on the canvas; a **In Subsets** section lists all available subsets with checkboxes.
+- Check/uncheck to add or remove the entity from a subset.
+- Schema-level slots also show the **In Subsets** section when you expand them in **Schema Settings → Schema Slots**.
+
+**On the canvas** (context menu):
+- Right-click a class or enum node; the context menu shows **Add to subset ▸** and **Remove from subset ▸** fly-out menus.
+
+### Subsets vs Views — when to use which
+
+| | **View** | **Subset** |
+|---|---|---|
+| Stored in | `.linkml-editor.yaml` (editor only) | `schema.yaml` (schema file — shared) |
+| Visible to LinkML tools | No | Yes |
+| Use for | Personal canvas organisation | Domain groupings meaningful to downstream tools |
+
+**Demote subset to view** — click ⬇ on a subset row to copy its membership into a new editor view. The subset itself is preserved; the view gives you an editor-side reference to the same set.
+
+---
+
 ## Focus Modes
 
 The **Focus Mode Toolbar** (above the canvas) lets you isolate a subset of the schema:
 
 - **No Focus** — show all classes and enums
 - **Class Focus** — show only the selected class and its direct relationships
-- **Subset Focus** — show only elements tagged with a specific LinkML subset
+- **Subset Focus** — show only elements tagged with a specific LinkML subset (also activatable from the Subsets panel)
 
 Use focus modes when working on large schemas to reduce visual clutter.
 
