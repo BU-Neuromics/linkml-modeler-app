@@ -3,6 +3,7 @@
   "version": "0.3.2",
   "private": true,
   "description": "CORS proxy for isomorphic-git browser git operations",
+  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
