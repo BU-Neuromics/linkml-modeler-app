@@ -48,6 +48,10 @@ export function DisplayPanel() {
   const globalRenderMode = useAppStore((s) => s.globalRenderMode);
   const setGlobalRenderMode = useAppStore((s) => s.setGlobalRenderMode);
   const updateView = useAppStore((s) => s.updateView);
+  const hopDimmingEnabled = useAppStore((s) => s.hopDimmingEnabled);
+  const hopDimmingN = useAppStore((s) => s.hopDimmingN);
+  const setHopDimmingEnabled = useAppStore((s) => s.setHopDimmingEnabled);
+  const setHopDimmingN = useAppStore((s) => s.setHopDimmingN);
 
   // A3: Selection state and schema info
   const selectedNodeIds = useAppStore((s) => s.selectedNodeIds);
@@ -356,7 +360,50 @@ export function DisplayPanel() {
 
       {/* B1: Inline range rendering — placeholder */}
       {/* B2: Edge density controls — placeholder */}
-      {/* B3: Hop-distance dimming — placeholder */}
+
+      {/* B3: Hop-distance dimming */}
+      <div style={styles.section}>
+        <div style={styles.sectionHeader}>Hop Dimming</div>
+        <div style={styles.sectionBody}>
+          <button
+            id="lme-display-hop-dimming-toggle"
+            style={{
+              ...styles.toggleBtn,
+              borderColor: hopDimmingEnabled ? 'var(--color-accent-hover)' : 'var(--color-border-default)',
+              color: hopDimmingEnabled ? 'var(--color-accent-hover)' : 'var(--color-fg-muted)',
+            }}
+            onClick={() => setHopDimmingEnabled(!hopDimmingEnabled)}
+            title={`${hopDimmingEnabled ? 'Disable' : 'Enable'} hop-distance dimming on selection`}
+          >
+            {hopDimmingEnabled ? 'on' : 'off'}
+          </button>
+          <div style={styles.nHopRow}>
+            <input
+              id="lme-display-hop-dimming-n"
+              type="number"
+              min={1}
+              max={9}
+              value={hopDimmingN}
+              onChange={(e) => setHopDimmingN(parseInt(e.target.value, 10) || 1)}
+              style={{ ...styles.nHopInput, opacity: hopDimmingEnabled ? 1 : 0.4 }}
+              disabled={!hopDimmingEnabled}
+              title="Number of hops to keep visible"
+              aria-label="Hop-dimming distance"
+            />
+            <span
+              style={{
+                fontSize: 11,
+                fontFamily: 'var(--font-family-mono)',
+                color: hopDimmingEnabled ? 'var(--color-fg-secondary)' : 'var(--color-fg-muted)',
+                flex: 1,
+              }}
+            >
+              hops
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* D1: Clustering — placeholder */}
     </div>
   );

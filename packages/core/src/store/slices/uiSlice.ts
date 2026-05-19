@@ -13,6 +13,21 @@ export interface Toast {
 
 const HIDDEN_EDGE_TYPES_KEY = 'linkml-editor-hidden-edge-types';
 const HIGHLIGHT_SETTINGS_KEY = 'linkml-editor-highlight-settings';
+const HOP_DIMMING_KEY = 'linkml-editor-hop-dimming';
+
+function loadHopDimming(): { enabled: boolean; n: number } {
+  try {
+    const raw = localStorage.getItem(HOP_DIMMING_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        enabled: parsed.enabled ?? false,
+        n: typeof parsed.n === 'number' ? Math.max(1, Math.min(9, parsed.n)) : 2,
+      };
+    }
+  } catch { /* ignore */ }
+  return { enabled: false, n: 2 };
+}
 
 function loadHiddenEdgeTypes(): Set<string> {
   try {
@@ -61,6 +76,10 @@ export interface UISlice {
   highlightOnSelection: boolean;
   /** Global rendering mode used when no view is active or the active view has no override */
   globalRenderMode: 'canvas' | 'outline';
+  /** Whether hop-distance dimming is active (B3). Off by default. */
+  hopDimmingEnabled: boolean;
+  /** Number of hops within which nodes/edges are kept at full opacity (B3). */
+  hopDimmingN: number;
 
   // Actions
   setTheme(theme: Theme): void;
@@ -78,6 +97,8 @@ export interface UISlice {
   setHighlightOnHover(value: boolean): void;
   setHighlightOnSelection(value: boolean): void;
   setGlobalRenderMode(mode: 'canvas' | 'outline'): void;
+  setHopDimmingEnabled(value: boolean): void;
+  setHopDimmingN(n: number): void;
 }
 
 let toastCounter = 0;
@@ -94,6 +115,8 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   highlightOnHover: loadHighlightSettings().onHover,
   highlightOnSelection: loadHighlightSettings().onSelection,
   globalRenderMode: 'canvas',
+  hopDimmingEnabled: loadHopDimming().enabled,
+  hopDimmingN: loadHopDimming().n,
 
   setTheme(theme) {
     set({ theme });
@@ -163,5 +186,20 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
 
   setGlobalRenderMode(mode) {
     set({ globalRenderMode: mode });
+  },
+
+  setHopDimmingEnabled(value) {
+    set((state) => {
+      try { localStorage.setItem(HOP_DIMMING_KEY, JSON.stringify({ enabled: value, n: state.hopDimmingN })); } catch { /* ignore */ }
+      return { hopDimmingEnabled: value };
+    });
+  },
+
+  setHopDimmingN(n) {
+    const clamped = Math.max(1, Math.min(9, n));
+    set((state) => {
+      try { localStorage.setItem(HOP_DIMMING_KEY, JSON.stringify({ enabled: state.hopDimmingEnabled, n: clamped })); } catch { /* ignore */ }
+      return { hopDimmingN: clamped };
+    });
   },
 });
