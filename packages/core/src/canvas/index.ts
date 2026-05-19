@@ -1,4 +1,5 @@
 export { SchemaCanvas } from './SchemaCanvas.js';
+export { OutlineView } from './OutlineView.js';
 export {
   buildAdjacency,
   getDirectNeighbors,
