@@ -269,6 +269,13 @@ function SchemaCanvasInner() {
   const hopDimmingEnabled = useAppStore((s) => s.hopDimmingEnabled);
   const hopDimmingN = useAppStore((s) => s.hopDimmingN);
   const groupByImportSource = useAppStore((s) => s.groupByImportSource);
+  const globalRangeEdgesMode = useAppStore((s) => s.globalRangeEdgesMode);
+
+  // Per-view range-edges override; falls back to global setting (B1)
+  const effectiveRangeEdgesMode = useMemo(() => {
+    const activeView = views.find((v) => v.id === activeViewId);
+    return activeView?.edgeFilters?.rangeEdges ?? globalRangeEdgesMode;
+  }, [views, activeViewId, globalRangeEdgesMode]);
 
   // Schema mutations
   const addClass = useAppStore((s) => s.addClass);
@@ -354,8 +361,8 @@ function SchemaCanvasInner() {
 
   const { nodes: derivedNodes, edges: derivedEdges } = useMemo(() => {
     if (!activeSchemaFile) return { nodes: [], edges: [] };
-    return deriveGraph(activeSchemaFile.schema, { ...localLayout, labels: effectiveLabels }, {}, ghostEntities, collapsedGroups, allSchemaSlots, hiddenEdgeTypes, groupByImportSource);
-  }, [activeSchemaFile, ghostEntities, localLayout, effectiveLabels, collapsedGroups, allSchemaSlots, hiddenEdgeTypes, groupByImportSource]);
+    return deriveGraph(activeSchemaFile.schema, { ...localLayout, labels: effectiveLabels }, {}, ghostEntities, collapsedGroups, allSchemaSlots, hiddenEdgeTypes, groupByImportSource, effectiveRangeEdgesMode);
+  }, [activeSchemaFile, ghostEntities, localLayout, effectiveLabels, collapsedGroups, allSchemaSlots, hiddenEdgeTypes, groupByImportSource, effectiveRangeEdgesMode]);
 
   useEffect(() => {
     setNodes(derivedNodes);
@@ -370,7 +377,7 @@ function SchemaCanvasInner() {
     if (hasLayoutData) {
       void Promise.resolve(activeSchemaFile.canvasLayout).then(setLocalLayout);
     } else {
-      void runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes, groupByImportSource).then((layout) => {
+      void runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes, groupByImportSource, effectiveRangeEdgesMode).then((layout) => {
         setLocalLayout(layout);
         setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 100);
       });
@@ -401,7 +408,7 @@ function SchemaCanvasInner() {
     if (!hasUnsaved) return;
 
     // Re-run auto-layout to incorporate the new ghost nodes
-    runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes, groupByImportSource).then((layout) => {
+    runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes, groupByImportSource, effectiveRangeEdgesMode).then((layout) => {
       // Merge: keep existing user-adjusted positions, add new ghost positions
       setLocalLayout((prev) => ({
         nodes: { ...layout.nodes, ...prev.nodes },
@@ -414,9 +421,11 @@ function SchemaCanvasInner() {
   // Zoom to node when a focus request is pending
   useEffect(() => {
     if (!focusNodeRequest) return;
-    const node = storeNodes.find((n) => n.id === focusNodeRequest);
+    // Try plain id first, then ghost__ prefix (for chips that reference imported entities)
+    const node = storeNodes.find((n) => n.id === focusNodeRequest)
+      ?? storeNodes.find((n) => n.id === `ghost__${focusNodeRequest}`);
     if (node) {
-      fitView({ nodes: [{ id: focusNodeRequest }], padding: 0.4, duration: 400, maxZoom: 1.5 });
+      fitView({ nodes: [{ id: node.id }], padding: 0.4, duration: 400, maxZoom: 1.5 });
       requestFocusNode(null);
     }
     // If node not found yet (e.g., schema is still switching), keep request pending
@@ -435,11 +444,11 @@ function SchemaCanvasInner() {
 
   const handleAutoLayout = useCallback(async () => {
     if (!activeSchemaFile) return;
-    const layout = await runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes);
+    const layout = await runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes, groupByImportSource, effectiveRangeEdgesMode);
     setLocalLayout(layout);
     setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 100);
     scheduleManifestWrite();
-  }, [activeSchemaFile, ghostEntities, hiddenEdgeTypes, fitView, scheduleManifestWrite]);
+  }, [activeSchemaFile, ghostEntities, hiddenEdgeTypes, groupByImportSource, effectiveRangeEdgesMode, fitView, scheduleManifestWrite]);
 
   // ── ReactFlow event handlers ──────────────────────────────────────────────
 
