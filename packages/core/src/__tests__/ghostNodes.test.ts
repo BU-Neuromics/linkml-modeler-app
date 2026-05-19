@@ -76,7 +76,7 @@ describe('Ghost node pipeline', () => {
     expect(referenced.some((e) => e.name === 'Animal')).toBe(false);
   });
 
-  it('deriveGraph creates ghost nodes for referenced imported entities', () => {
+  it('deriveGraph creates ghost nodes for referenced imported entities (grouped mode)', () => {
     const baseSchema = {
       ...emptySchema('base', 'https://example.org/base', 'base'),
       classes: { Person: emptyClassDefinition('Person') },
@@ -93,7 +93,8 @@ describe('Ghost node pipeline', () => {
     const mainFile = makeSchemaFile('m1', 'main.yaml', mainSchema);
 
     const ghostEntities = collectReferencedImportedEntities(mainFile, [mainFile, baseFile]);
-    const { nodes, edges } = deriveGraph(mainSchema, emptyCanvasLayout(), {}, ghostEntities, {});
+    // groupByImportSource=true: ghost nodes are wrapped in an importGroup container
+    const { nodes, edges } = deriveGraph(mainSchema, emptyCanvasLayout(), {}, ghostEntities, {}, {}, new Set(), true);
 
     // Should have: Event node, importGroup node, ghost__Person node
     const nodeIds = nodes.map((n) => n.id);
@@ -102,6 +103,36 @@ describe('Ghost node pipeline', () => {
     expect(nodeIds).toContain('ghost__Person');
 
     // Should have a range edge from Event to ghost__Person
+    const rangeEdge = edges.find((e) => e.source === 'Event' && e.target === 'ghost__Person');
+    expect(rangeEdge).toBeDefined();
+  });
+
+  it('deriveGraph creates ghost nodes in flat mode (groupByImportSource off by default)', () => {
+    const baseSchema = {
+      ...emptySchema('base', 'https://example.org/base', 'base'),
+      classes: { Person: emptyClassDefinition('Person') },
+    };
+    const baseFile = makeSchemaFile('b1', 'base.yaml', baseSchema);
+
+    const mainClass = emptyClassDefinition('Event');
+    mainClass.attributes = { participant: { name: 'participant', range: 'Person' } };
+    const mainSchema = {
+      ...emptySchema('main', 'https://example.org/main', 'main'),
+      imports: ['./base'],
+      classes: { Event: mainClass },
+    };
+    const mainFile = makeSchemaFile('m1', 'main.yaml', mainSchema);
+
+    const ghostEntities = collectReferencedImportedEntities(mainFile, [mainFile, baseFile]);
+    // groupByImportSource defaults to false: ghost nodes are flat, no importGroup container
+    const { nodes, edges } = deriveGraph(mainSchema, emptyCanvasLayout(), {}, ghostEntities, {});
+
+    const nodeIds = nodes.map((n) => n.id);
+    expect(nodeIds).toContain('Event');
+    expect(nodeIds).toContain('ghost__Person');
+    expect(nodeIds).not.toContain('importGroup__base.yaml');
+
+    // Range edge should still connect Event → ghost__Person
     const rangeEdge = edges.find((e) => e.source === 'Event' && e.target === 'ghost__Person');
     expect(rangeEdge).toBeDefined();
   });
