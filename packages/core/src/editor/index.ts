@@ -1,6 +1,7 @@
 export { PropertiesPanel, parseRangeEdgeId } from './PropertiesPanel.js';
 export { SchemaSettingsDialog } from './SchemaSettingsDialog.js';
 export { ProjectPanel } from './ProjectPanel.js';
+export { DisplayPanel } from './DisplayPanel.js';
 export { ValidationPanel } from './ValidationPanel.js';
 export { FocusModeToolbar } from './FocusModeToolbar.js';
 export { MenuBar } from './MenuBar.js';
