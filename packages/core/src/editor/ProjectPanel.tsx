@@ -82,10 +82,15 @@ export function ProjectPanel() {
     if (!activeProject) return;
     const activeSchemaFile = activeProject.schemas.find((s) => s.id === activeSchemaId);
     if (!activeSchemaFile || selectedNodeIds.length === 0) return;
-    const members = selectedNodeIds.map((name) => {
-      const isEnum = name in (activeSchemaFile.schema.enums ?? {});
-      return { schemaFilePath: activeSchemaFile.filePath, name, kind: (isEnum ? 'enum' : 'class') as 'class' | 'enum' };
-    });
+    const schemaClasses = activeSchemaFile.schema.classes ?? {};
+    const schemaEnums = activeSchemaFile.schema.enums ?? {};
+    const members = selectedNodeIds
+      .filter((name) => name in schemaClasses || name in schemaEnums)
+      .map((name) => {
+        const isEnum = name in schemaEnums;
+        return { schemaFilePath: activeSchemaFile.filePath, name, kind: (isEnum ? 'enum' : 'class') as 'class' | 'enum' };
+      });
+    if (members.length === 0) return;
     const view = createView({ name: `View ${views.length + 1}`, members });
     setActiveViewId(view.id);
     saveManifestWithViews([...views, view], view.id);

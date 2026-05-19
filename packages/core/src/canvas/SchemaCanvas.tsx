@@ -1006,7 +1006,7 @@ function SchemaCanvasInner() {
             <span>View: <strong>{view.name}</strong> · {memberCount} member{memberCount !== 1 ? 's' : ''}</span>
             <button
               style={styles.focusExitBtn}
-              onClick={() => useAppStore.getState().setActiveViewId(null)}
+              onClick={() => { useAppStore.getState().setActiveViewId(null); scheduleManifestWrite(); }}
             >
               Exit view
             </button>

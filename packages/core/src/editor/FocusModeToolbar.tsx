@@ -10,10 +10,15 @@
  */
 import React, { useCallback, useMemo } from 'react';
 import { useAppStore } from '../store/index.js';
+import { usePlatform } from '../platform/PlatformContext.js';
+import { buildManifestData, writeEditorManifest } from '../io/editorManifest.js';
 import { Hexagon, X } from '../ui/icons/index.js';
 
 export function FocusModeToolbar() {
+  const platform = usePlatform();
   const activeSchemaFile = useAppStore((s) => s.getActiveSchema());
+  const activeProject = useAppStore((s) => s.activeProject);
+  const hiddenSchemaIds = useAppStore((s) => s.hiddenSchemaIds);
   const focusMode = useAppStore((s) => s.focusMode);
   const setFocusMode = useAppStore((s) => s.setFocusMode);
   const selectedNodeIds = useAppStore((s) => s.selectedNodeIds);
@@ -50,14 +55,25 @@ export function FocusModeToolbar() {
 
   // Save current selection as a persistent named View
   const handleSaveAsView = useCallback(() => {
-    if (!activeSchemaFile || selectedNodeIds.length === 0) return;
-    const members = selectedNodeIds.map((name) => {
-      const isEnum = name in (activeSchemaFile.schema.enums ?? {});
-      return { schemaFilePath: activeSchemaFile.filePath, name, kind: (isEnum ? 'enum' : 'class') as 'class' | 'enum' };
-    });
+    if (!activeSchemaFile || !activeProject || selectedNodeIds.length === 0) return;
+    const schemaClasses = activeSchemaFile.schema.classes ?? {};
+    const schemaEnums = activeSchemaFile.schema.enums ?? {};
+    const members = selectedNodeIds
+      .filter((name) => name in schemaClasses || name in schemaEnums)
+      .map((name) => {
+        const isEnum = name in schemaEnums;
+        return { schemaFilePath: activeSchemaFile.filePath, name, kind: (isEnum ? 'enum' : 'class') as 'class' | 'enum' };
+      });
+    if (members.length === 0) return;
     const view = createView({ name: `View ${views.length + 1}`, members });
     setActiveViewId(view.id);
-  }, [activeSchemaFile, selectedNodeIds, views.length, createView, setActiveViewId]);
+    const nextViews = [...views, view];
+    writeEditorManifest(
+      platform,
+      activeProject.rootPath,
+      buildManifestData(activeProject, null, null, hiddenSchemaIds, nextViews, view.id)
+    );
+  }, [activeSchemaFile, activeProject, hiddenSchemaIds, selectedNodeIds, views, createView, setActiveViewId, platform]);
 
   if (!activeSchemaFile) return null;
 
