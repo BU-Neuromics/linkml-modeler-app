@@ -223,14 +223,6 @@ const dlgStyles: Record<string, React.CSSProperties> = {
   },
 };
 
-// ── Edge-type toggle definitions ──────────────────────────────────────────────
-const EDGE_TOGGLE_DEFS = [
-  { type: 'range',    label: 'range',    color: 'var(--color-state-success)' },
-  { type: 'is_a',     label: 'is_a',     color: 'var(--color-accent-hover)' },
-  { type: 'mixin',    label: 'mixin',    color: 'var(--color-edge-mixin)' },
-  { type: 'union_of', label: 'union_of', color: 'var(--color-edge-union)' },
-] as const;
-
 // ── Inner canvas component ────────────────────────────────────────────────────
 function SchemaCanvasInner() {
   const { fitView, screenToFlowPosition } = useReactFlow();
@@ -259,11 +251,8 @@ function SchemaCanvasInner() {
   const clearActiveEntity = useAppStore((s) => s.clearActiveEntity);
   const activeEntity = useAppStore((s) => s.activeEntity);
   const hiddenEdgeTypes = useAppStore((s) => s.hiddenEdgeTypes);
-  const toggleEdgeTypeVisibility = useAppStore((s) => s.toggleEdgeTypeVisibility);
   const highlightOnHover = useAppStore((s) => s.highlightOnHover);
   const highlightOnSelection = useAppStore((s) => s.highlightOnSelection);
-  const setHighlightOnHover = useAppStore((s) => s.setHighlightOnHover);
-  const setHighlightOnSelection = useAppStore((s) => s.setHighlightOnSelection);
 
   // Schema mutations
   const addClass = useAppStore((s) => s.addClass);
@@ -893,52 +882,6 @@ function SchemaCanvasInner() {
 
       {/* Toolbar */}
       <div id="lme-canvas-toolbar" style={styles.toolbar}>
-        {EDGE_TOGGLE_DEFS.map(({ type, label, color }) => {
-          const hidden = hiddenEdgeTypes.has(type);
-          return (
-            <button
-              key={type}
-              id={`lme-canvas-toggle-${type}`}
-              style={{
-                ...styles.toolbarBtn,
-                borderColor: hidden ? 'var(--color-border-default)' : color,
-                color: hidden ? 'var(--color-fg-muted)' : color,
-                opacity: hidden ? 0.5 : 1,
-                textDecoration: hidden ? 'line-through' : 'none',
-              }}
-              onClick={() => toggleEdgeTypeVisibility(type)}
-              title={`${hidden ? 'Show' : 'Hide'} ${label} edges`}
-            >
-              {label}
-            </button>
-          );
-        })}
-        <div style={styles.toolbarSep} />
-        <button
-          id="lme-canvas-highlight-hover"
-          style={{
-            ...styles.toolbarBtn,
-            borderColor: highlightOnHover ? 'var(--color-accent-hover)' : 'var(--color-border-default)',
-            color: highlightOnHover ? 'var(--color-accent-hover)' : 'var(--color-fg-muted)',
-          }}
-          onClick={() => setHighlightOnHover(!highlightOnHover)}
-          title={`${highlightOnHover ? 'Disable' : 'Enable'} edge highlight on hover`}
-        >
-          Hover hl
-        </button>
-        <button
-          id="lme-canvas-highlight-selection"
-          style={{
-            ...styles.toolbarBtn,
-            borderColor: highlightOnSelection ? 'var(--color-accent-hover)' : 'var(--color-border-default)',
-            color: highlightOnSelection ? 'var(--color-accent-hover)' : 'var(--color-fg-muted)',
-          }}
-          onClick={() => setHighlightOnSelection(!highlightOnSelection)}
-          title={`${highlightOnSelection ? 'Disable' : 'Enable'} edge highlight on selection`}
-        >
-          Select hl
-        </button>
-        <div style={styles.toolbarSep} />
         {!isReadOnly && (
           <>
             <button
