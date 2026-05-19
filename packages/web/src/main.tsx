@@ -44,6 +44,7 @@ import {
   PropertiesPanel,
   SchemaSettingsDialog,
   ProjectPanel,
+  DisplayPanel,
   ValidationPanel,
   FocusModeToolbar,
   MenuBar,
@@ -501,6 +502,9 @@ function App() {
       <div style={styles.main}>
         {/* Project panel (left) */}
         <ProjectPanel />
+
+        {/* Display controls panel */}
+        <DisplayPanel />
 
         {/* Canvas + focus toolbar (center) */}
         <div style={styles.canvasColumn}>
