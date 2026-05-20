@@ -16,6 +16,9 @@ const HIGHLIGHT_SETTINGS_KEY = 'linkml-editor-highlight-settings';
 const GROUP_BY_IMPORT_SOURCE_KEY = 'linkml-editor-group-by-import-source';
 const HOP_DIMMING_KEY = 'linkml-editor-hop-dimming';
 const TABLE_MODE_ENABLED_KEY = 'linkml-editor-table-mode-enabled';
+const RANGE_EDGES_MODE_KEY = 'linkml-editor-range-edges-mode';
+
+export type RangeEdgesMode = 'show' | 'inline' | 'auto';
 
 function loadGroupByImportSource(): boolean {
   try {
@@ -45,6 +48,14 @@ function loadTableModeEnabled(): boolean {
     if (raw !== null) return JSON.parse(raw) === true;
   } catch { /* ignore */ }
   return false;
+}
+
+function loadRangeEdgesMode(): RangeEdgesMode {
+  try {
+    const raw = localStorage.getItem(RANGE_EDGES_MODE_KEY);
+    if (raw === 'show' || raw === 'inline' || raw === 'auto') return raw;
+  } catch { /* ignore */ }
+  return 'show';
 }
 
 function loadHiddenEdgeTypes(): Set<string> {
@@ -102,6 +113,8 @@ export interface UISlice {
   hopDimmingN: number;
   /** Feature flag: enables the table rendering mode UI (C2). Off by default; toggle via localStorage. */
   tableModeEnabled: boolean;
+  /** Global range-edge rendering mode: show edges, inline as chips, or auto-decide (B1). */
+  globalRangeEdgesMode: RangeEdgesMode;
 
   // Actions
   setTheme(theme: Theme): void;
@@ -123,6 +136,7 @@ export interface UISlice {
   setHopDimmingEnabled(value: boolean): void;
   setHopDimmingN(n: number): void;
   setTableModeEnabled(value: boolean): void;
+  setGlobalRangeEdgesMode(mode: RangeEdgesMode): void;
 }
 
 let toastCounter = 0;
@@ -143,6 +157,7 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   hopDimmingEnabled: loadHopDimming().enabled,
   hopDimmingN: loadHopDimming().n,
   tableModeEnabled: loadTableModeEnabled(),
+  globalRangeEdgesMode: loadRangeEdgesMode(),
 
   setTheme(theme) {
     set({ theme });
@@ -237,5 +252,10 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   setTableModeEnabled(value) {
     try { localStorage.setItem(TABLE_MODE_ENABLED_KEY, JSON.stringify(value)); } catch { /* ignore */ }
     set({ tableModeEnabled: value });
+  },
+
+  setGlobalRangeEdgesMode(mode) {
+    try { localStorage.setItem(RANGE_EDGES_MODE_KEY, mode); } catch { /* ignore */ }
+    set({ globalRangeEdgesMode: mode });
   },
 });

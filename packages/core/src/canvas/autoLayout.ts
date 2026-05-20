@@ -12,6 +12,7 @@ import ELK from 'elkjs/lib/elk.bundled.js';
 import type { ElkNode, ElkExtendedEdge } from 'elkjs/lib/elk-api.js';
 import type { LinkMLSchema, CanvasLayout, EdgeLayout } from '../model/index.js';
 import type { ImportedEntity } from '../io/importResolver.js';
+import type { RangeEdgesMode } from '../store/slices/uiSlice.js';
 
 // Node dimensions used for layout calculations
 const CLASS_W = 240;
@@ -43,7 +44,8 @@ export async function runAutoLayout(
   schema: LinkMLSchema,
   opts: AutoLayoutOptions = {},
   ghostEntities: ImportedEntity[] = [],
-  hiddenEdgeTypes: ReadonlySet<string> = new Set()
+  hiddenEdgeTypes: ReadonlySet<string> = new Set(),
+  rangeEdgesMode: RangeEdgesMode = 'show'
 ): Promise<CanvasLayout> {
   const options = { ...DEFAULT_OPTIONS, ...opts };
 
@@ -114,8 +116,8 @@ export async function runAutoLayout(
       }
     }
 
-    // range edges
-    if (!hiddenEdgeTypes.has('range')) {
+    // range edges — skip when mode is inline/auto (chips replace edges)
+    if (!hiddenEdgeTypes.has('range') && rangeEdgesMode === 'show') {
       for (const [slotName, slot] of Object.entries(classDef.attributes)) {
         if (!slot.range || !allIds.has(slot.range)) continue;
         addEdge(
