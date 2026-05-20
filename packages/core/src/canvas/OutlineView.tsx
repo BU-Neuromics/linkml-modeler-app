@@ -556,7 +556,7 @@ export function OutlineView() {
   // Auto-focus on mount
   useEffect(() => {
     if (navigableIds.length > 0 && !focusedId) {
-      setFocusedId(navigableIds[0]);
+      setFocusedId(navigableIds[0]); // eslint-disable-line react-hooks/set-state-in-effect
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
