@@ -81,6 +81,10 @@ function CanvasContextMenu({
   onAddEnum,
   onAddLabel,
   onDeleteNode,
+  subsets,
+  onAddToSubset,
+  onRemoveFromSubset,
+  entitySubsets,
 }: {
   menu: ContextMenu;
   onClose: () => void;
@@ -88,7 +92,17 @@ function CanvasContextMenu({
   onAddEnum: (pos: XYPosition) => void;
   onAddLabel: (pos: XYPosition) => void;
   onDeleteNode: (nodeId: string) => void;
+  subsets: string[];
+  onAddToSubset: (nodeId: string, subsetName: string) => void;
+  onRemoveFromSubset: (nodeId: string, subsetName: string) => void;
+  entitySubsets: string[];
 }) {
+  const [subsetMenuOpen, setSubsetMenuOpen] = React.useState<'add' | 'remove' | null>(null);
+  const isClass = menu.nodeType === 'classNode';
+  const isEnum = menu.nodeType === 'enumNode';
+  const canEditSubsets = (isClass || isEnum) && subsets.length > 0;
+  const addable = subsets.filter((s) => !entitySubsets.includes(s));
+  const removable = entitySubsets;
   return (
     <div
       style={{
@@ -96,13 +110,59 @@ function CanvasContextMenu({
         left: menu.x,
         top: menu.y,
       }}
-      onMouseLeave={onClose}
+      onMouseLeave={() => { setSubsetMenuOpen(null); onClose(); }}
     >
       {menu.nodeId ? (
         <>
           <div style={ctxStyles.item} onClick={() => { onDeleteNode(menu.nodeId!); onClose(); }}>
             🗑 Delete {menu.nodeType === 'enumNode' ? 'enum' : menu.nodeType === 'labelNode' ? 'label' : 'class'}
           </div>
+          {canEditSubsets && addable.length > 0 && (
+            <div style={ctxStyles.submenuHost}>
+              <div
+                style={ctxStyles.item}
+                onMouseEnter={() => setSubsetMenuOpen('add')}
+              >
+                <span style={{ marginRight: 6 }}>⊂</span> Add to subset ▸
+              </div>
+              {subsetMenuOpen === 'add' && (
+                <div style={ctxStyles.submenu}>
+                  {addable.map((sn) => (
+                    <div
+                      key={sn}
+                      style={ctxStyles.item}
+                      onClick={() => { onAddToSubset(menu.nodeId!, sn); onClose(); }}
+                    >
+                      {sn}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {canEditSubsets && removable.length > 0 && (
+            <div style={ctxStyles.submenuHost}>
+              <div
+                style={ctxStyles.item}
+                onMouseEnter={() => setSubsetMenuOpen('remove')}
+              >
+                <span style={{ marginRight: 6 }}>⊄</span> Remove from subset ▸
+              </div>
+              {subsetMenuOpen === 'remove' && (
+                <div style={ctxStyles.submenu}>
+                  {removable.map((sn) => (
+                    <div
+                      key={sn}
+                      style={ctxStyles.item}
+                      onClick={() => { onRemoveFromSubset(menu.nodeId!, sn); onClose(); }}
+                    >
+                      {sn}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -130,7 +190,7 @@ const ctxStyles: Record<string, React.CSSProperties> = {
     boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
     zIndex: 'var(--z-modal)' as unknown as number,
     minWidth: 160,
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   item: {
     padding: '8px 14px',
@@ -141,6 +201,21 @@ const ctxStyles: Record<string, React.CSSProperties> = {
     userSelect: 'none',
     display: 'flex',
     alignItems: 'center',
+  },
+  submenuHost: {
+    position: 'relative',
+  },
+  submenu: {
+    position: 'absolute',
+    left: '100%',
+    top: 0,
+    background: 'var(--color-bg-surface)',
+    border: '1px solid var(--color-border-default)',
+    borderRadius: 6,
+    boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+    minWidth: 140,
+    zIndex: 1,
+    overflow: 'hidden',
   },
 };
 
@@ -277,6 +352,10 @@ function SchemaCanvasInner() {
   const updateClass = useAppStore((s) => s.updateClass);
   const autoAddImportForRange = useAppStore((s) => s.autoAddImportForRange);
 
+  // Subset mutations (A4)
+  const addEntityToSubset = useAppStore((s) => s.addEntityToSubset);
+  const removeEntityFromSubset = useAppStore((s) => s.removeEntityFromSubset);
+
   // Label mutations
   const addLabelToCanvas = useAppStore((s) => s.addLabelToCanvas);
   const updateLabelInCanvas = useAppStore((s) => s.updateLabelInCanvas);
@@ -317,6 +396,12 @@ function SchemaCanvasInner() {
   );
 
   const isReadOnly = activeSchemaFile?.isReadOnly ?? false;
+
+  // Subset names for context menu (A4)
+  const activeSubsets = useMemo(
+    () => (activeSchemaFile && !isReadOnly ? Object.keys(activeSchemaFile.schema.subsets) : []),
+    [activeSchemaFile, isReadOnly]
+  );
 
   // Derive labels: store provides text/metadata; labelDragPositions overrides positions during active drags.
   // No effect needed — useMemo reacts to store and drag state changes automatically.
@@ -1048,6 +1133,24 @@ function SchemaCanvasInner() {
           onAddEnum={handleAddEnum}
           onAddLabel={handleAddLabel}
           onDeleteNode={handleDeleteNode}
+          subsets={activeSubsets}
+          entitySubsets={(() => {
+            if (!contextMenu.nodeId || !activeSchemaFile) return [];
+            const schema = activeSchemaFile.schema;
+            if (contextMenu.nodeType === 'classNode') return schema.classes[contextMenu.nodeId]?.subsetOf ?? [];
+            if (contextMenu.nodeType === 'enumNode') return schema.enums[contextMenu.nodeId]?.subsetOf ?? [];
+            return [];
+          })()}
+          onAddToSubset={(nodeId, subsetName) => {
+            if (!activeSchemaId) return;
+            const kind = contextMenu?.nodeType === 'enumNode' ? 'enum' : 'class';
+            addEntityToSubset(activeSchemaId, nodeId, subsetName, kind);
+          }}
+          onRemoveFromSubset={(nodeId, subsetName) => {
+            if (!activeSchemaId) return;
+            const kind = contextMenu?.nodeType === 'enumNode' ? 'enum' : 'class';
+            removeEntityFromSubset(activeSchemaId, nodeId, subsetName, kind);
+          }}
         />
       )}
 
