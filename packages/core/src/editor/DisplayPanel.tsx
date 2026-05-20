@@ -54,6 +54,8 @@ export function DisplayPanel() {
   const hopDimmingN = useAppStore((s) => s.hopDimmingN);
   const setHopDimmingEnabled = useAppStore((s) => s.setHopDimmingEnabled);
   const setHopDimmingN = useAppStore((s) => s.setHopDimmingN);
+  const globalRangeEdgesMode = useAppStore((s) => s.globalRangeEdgesMode);
+  const setGlobalRangeEdgesMode = useAppStore((s) => s.setGlobalRangeEdgesMode);
 
   // A3: Selection state and schema info
   const selectedNodeIds = useAppStore((s) => s.selectedNodeIds);
@@ -79,6 +81,19 @@ export function DisplayPanel() {
   const activeRenderMode: 'canvas' | 'outline' | 'table' = (rawRenderMode === 'table' && !tableModeEnabled)
     ? 'canvas'
     : (rawRenderMode as 'canvas' | 'outline' | 'table');
+
+  // B1: Effective range-edges mode — active view override > global setting
+  const activeRangeEdgesMode = activeView?.edgeFilters?.rangeEdges ?? globalRangeEdgesMode;
+
+  function setRangeEdgesMode(mode: 'show' | 'inline' | 'auto') {
+    if (activeView) {
+      updateView(activeView.id, {
+        edgeFilters: { ...(activeView.edgeFilters ?? {}), rangeEdges: mode },
+      });
+    } else {
+      setGlobalRangeEdgesMode(mode);
+    }
+  }
 
   function setRenderMode(mode: 'canvas' | 'outline' | 'table') {
     if (activeView) {
@@ -400,7 +415,35 @@ export function DisplayPanel() {
         </div>
       </div>
 
-      {/* B1: Inline range rendering — placeholder */}
+      {/* B1: Range edge rendering mode */}
+      <div style={styles.section}>
+        <div style={styles.sectionHeader}>Range Edges</div>
+        <div style={styles.sectionBody}>
+          {(['show', 'inline', 'auto'] as const).map((mode) => (
+            <button
+              key={mode}
+              id={`lme-display-range-edges-${mode}`}
+              style={{
+                ...styles.toggleBtn,
+                borderColor: activeRangeEdgesMode === mode ? 'var(--color-state-success)' : 'var(--color-border-default)',
+                color: activeRangeEdgesMode === mode ? 'var(--color-state-success)' : 'var(--color-fg-muted)',
+              }}
+              onClick={() => setRangeEdgesMode(mode)}
+              title={
+                mode === 'show' ? 'Draw range relationships as ERD edges' :
+                mode === 'inline' ? 'Show range type as a clickable chip inside the class box' :
+                'Auto-choose based on schema density'
+              }
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+        {activeView && activeView.edgeFilters?.rangeEdges && (
+          <div style={styles.viewOverrideNote}>view override</div>
+        )}
+      </div>
+
       {/* B2: Edge density controls — placeholder */}
 
       {/* B3: Hop-distance dimming */}
@@ -555,5 +598,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'var(--font-family-mono)',
     cursor: 'pointer',
     textAlign: 'center' as const,
+  },
+  viewOverrideNote: {
+    fontSize: 9,
+    color: 'var(--color-fg-muted)',
+    fontStyle: 'italic',
+    padding: '0 8px 6px',
+    textAlign: 'right' as const,
   },
 };
