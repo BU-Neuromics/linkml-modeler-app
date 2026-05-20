@@ -16,6 +16,15 @@ const HIGHLIGHT_SETTINGS_KEY = 'linkml-editor-highlight-settings';
 const HOP_DIMMING_KEY = 'linkml-editor-hop-dimming';
 const GROUP_BY_IMPORT_SOURCE_KEY = 'linkml-editor-group-by-import-source';
 const RANGE_EDGES_MODE_KEY = 'linkml-editor-range-edges-mode';
+const TABLE_MODE_ENABLED_KEY = 'linkml-editor-table-mode-enabled';
+
+function loadTableModeEnabled(): boolean {
+  try {
+    const raw = localStorage.getItem(TABLE_MODE_ENABLED_KEY);
+    if (raw !== null) return JSON.parse(raw) === true;
+  } catch { /* ignore */ }
+  return false;
+}
 
 export type RangeEdgesMode = 'show' | 'inline' | 'auto';
 
@@ -95,7 +104,9 @@ export interface UISlice {
   /** Whether selecting a node highlights its edges and dims all others (sticky) */
   highlightOnSelection: boolean;
   /** Global rendering mode used when no view is active or the active view has no override */
-  globalRenderMode: 'canvas' | 'outline';
+  globalRenderMode: 'canvas' | 'outline' | 'table';
+  /** Feature flag: enables the table rendering mode UI (C2). Off by default; toggle via localStorage. */
+  tableModeEnabled: boolean;
   /** Whether hop-distance dimming is active (B3). Off by default. */
   hopDimmingEnabled: boolean;
   /** Number of hops within which nodes/edges are kept at full opacity (B3). */
@@ -120,7 +131,8 @@ export interface UISlice {
   toggleEdgeTypeVisibility(type: string): void;
   setHighlightOnHover(value: boolean): void;
   setHighlightOnSelection(value: boolean): void;
-  setGlobalRenderMode(mode: 'canvas' | 'outline'): void;
+  setGlobalRenderMode(mode: 'canvas' | 'outline' | 'table'): void;
+  setTableModeEnabled(value: boolean): void;
   setHopDimmingEnabled(value: boolean): void;
   setHopDimmingN(n: number): void;
   setGroupByImportSource(value: boolean): void;
@@ -141,6 +153,7 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   highlightOnHover: loadHighlightSettings().onHover,
   highlightOnSelection: loadHighlightSettings().onSelection,
   globalRenderMode: 'canvas',
+  tableModeEnabled: loadTableModeEnabled(),
   hopDimmingEnabled: loadHopDimming().enabled,
   hopDimmingN: loadHopDimming().n,
   groupByImportSource: loadGroupByImportSource(),
@@ -214,6 +227,11 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
 
   setGlobalRenderMode(mode) {
     set({ globalRenderMode: mode });
+  },
+
+  setTableModeEnabled(value) {
+    try { localStorage.setItem(TABLE_MODE_ENABLED_KEY, JSON.stringify(value)); } catch { /* ignore */ }
+    set({ tableModeEnabled: value });
   },
 
   setHopDimmingEnabled(value) {

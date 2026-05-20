@@ -51,6 +51,7 @@ import {
   SplashPage,
   SchemaCanvas,
   OutlineView,
+  TableView,
   CloneDialog,
   OpenSchemaFromUrlDialog,
   ImportSchemaDialog,
@@ -316,14 +317,18 @@ function App() {
   const setOpenFromUrlDialogOpen = useAppStore((s) => s.setOpenFromUrlDialogOpen);
   const syncStatus = useAppStore((s) => s.syncStatus);
   const globalRenderMode = useAppStore((s) => s.globalRenderMode);
+  const tableModeEnabled = useAppStore((s) => s.tableModeEnabled);
   const views = useAppStore((s) => s.views);
   const activeViewId = useAppStore((s) => s.activeViewId);
 
-  // Compute effective render mode: active view overrides global default
+  // Compute effective render mode: active view overrides global default; fall back
+  // to canvas when 'table' is requested but the feature flag is off.
   const activeRenderMode = React.useMemo(() => {
     const activeView = views.find((v) => v.id === activeViewId);
-    return activeView ? activeView.renderMode : globalRenderMode;
-  }, [views, activeViewId, globalRenderMode]);
+    const raw = activeView ? activeView.renderMode : globalRenderMode;
+    if (raw === 'table' && !tableModeEnabled) return 'canvas' as const;
+    return raw;
+  }, [views, activeViewId, globalRenderMode, tableModeEnabled]);
 
   // Enable "Switch Project" when 2+ projects are registered
   const [registeredProjectCount, setRegisteredProjectCount] = React.useState(() =>
@@ -534,7 +539,11 @@ function App() {
         <div style={styles.canvasColumn}>
           <FocusModeToolbar />
           <div id="lme-canvas-area" style={styles.canvasArea}>
-            {activeRenderMode === 'outline' ? <OutlineView /> : <SchemaCanvas />}
+            {activeRenderMode === 'outline'
+              ? <OutlineView />
+              : activeRenderMode === 'table'
+              ? <TableView />
+              : <SchemaCanvas />}
           </div>
         </div>
 
