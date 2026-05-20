@@ -133,7 +133,7 @@ export function CommandPalette() {
 
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
-  const [prevQuery, setPrevQuery] = useState(query);
+  const [prevQuery, setPrevQuery] = useState('');
   if (prevQuery !== query) {
     setPrevQuery(query);
     setActiveIndex(0);

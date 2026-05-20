@@ -557,7 +557,7 @@ export function OutlineView() {
   /* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
   useEffect(() => {
     if (navigableIds.length > 0 && !focusedId) {
-      setFocusedId(navigableIds[0]);
+      setFocusedId(navigableIds[0]); // eslint-disable-line react-hooks/set-state-in-effect
     }
   }, []);
   /* eslint-enable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
