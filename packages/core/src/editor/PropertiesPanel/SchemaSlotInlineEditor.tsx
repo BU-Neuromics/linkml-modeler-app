@@ -4,10 +4,12 @@ import { FieldRow, TextInput, TextArea, Checkbox, FilteredGroupedSelect } from '
 import type { OptionGroup } from '../../ui/fields/index.js';
 import { DeleteButton } from './internal.js';
 import { styles } from './styles.js';
+import { SubsetMembershipEditor } from './SubsetMembershipEditor.js';
 
 export function SchemaSlotInlineEditor({
   slot,
   schemaSlots,
+  schemaId,
   rangeOptionGroups,
   onUpdate,
   onDelete,
@@ -15,6 +17,7 @@ export function SchemaSlotInlineEditor({
 }: {
   slot: SlotDefinition;
   schemaSlots: Record<string, SlotDefinition>;
+  schemaId?: string;
   rangeOptionGroups: OptionGroup[];
   onUpdate: (partial: Partial<SlotDefinition>) => void;
   onDelete: () => void;
@@ -92,6 +95,9 @@ export function SchemaSlotInlineEditor({
               monospace
             />
           </FieldRow>
+          {schemaId && (
+            <SubsetMembershipEditor schemaId={schemaId} entityName={slot.name} kind="slot" />
+          )}
           <div style={styles.slotEditorActions}>
             <DeleteButton label="slot" onConfirm={onDelete} />
           </div>

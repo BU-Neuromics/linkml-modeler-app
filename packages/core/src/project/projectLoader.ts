@@ -5,13 +5,13 @@ import type { Project, SchemaFile } from '../model/index.js';
 import { emptyCanvasLayout, emptySchema } from '../model/index.js';
 import { parseYaml } from '../io/yaml.js';
 import { resolveImports } from '../io/importResolver.js';
-import { readEditorManifest, applyManifestToSchemas } from '../io/editorManifest.js';
+import { readEditorManifest, applyManifestToSchemas, type ViewDefinition } from '../io/editorManifest.js';
 
 /**
  * Check if a YAML string looks like a LinkML schema by testing for
  * characteristic top-level fields (`id:` and `prefixes:` or `classes:`).
  */
-function looksLikeLinkMLSchema(content: string): boolean {
+export function looksLikeLinkMLSchema(content: string): boolean {
   const hasId = /^id\s*:/m.test(content);
   const hasPrefixes = /^prefixes\s*:/m.test(content);
   const hasClasses = /^classes\s*:/m.test(content);
@@ -25,7 +25,7 @@ function looksLikeLinkMLSchema(content: string): boolean {
 export async function openProjectFromDirectory(
   dirPath: string,
   platform: PlatformAPI
-): Promise<{ project: Project; hiddenSchemaIds: Set<string> }> {
+): Promise<{ project: Project; hiddenSchemaIds: Set<string>; views: ViewDefinition[]; activeViewId: string | null }> {
   const entries = await platform.listDirectory(dirPath);
   const yamlFiles = entries.filter(
     (e) => !e.isDirectory && /\.(ya?ml)$/i.test(e.name)
@@ -58,11 +58,11 @@ export async function openProjectFromDirectory(
   const importedFiles = await resolveImports(schemaFiles, platform, dirPath);
   const allSchemas = [...schemaFiles, ...importedFiles];
 
-  // Apply editor manifest (layout + visibility) if present
+  // Apply editor manifest (layout + visibility + views) if present
   const manifest = await readEditorManifest(platform, dirPath);
-  const { schemas: schemasWithLayout, hiddenSchemaIds } = manifest
+  const { schemas: schemasWithLayout, hiddenSchemaIds, views, activeViewId } = manifest
     ? applyManifestToSchemas(allSchemas, manifest)
-    : { schemas: allSchemas, hiddenSchemaIds: new Set<string>() };
+    : { schemas: allSchemas, hiddenSchemaIds: new Set<string>(), views: [], activeViewId: null };
 
   const dirName = dirPath.split(/[\\/]/).filter(Boolean).pop() ?? 'Untitled Project';
 
@@ -75,7 +75,7 @@ export async function openProjectFromDirectory(
     updatedAt: new Date().toISOString(),
   };
 
-  return { project, hiddenSchemaIds };
+  return { project, hiddenSchemaIds, views, activeViewId };
 }
 
 /**
@@ -103,6 +103,78 @@ export async function loadDemoSchemaFromUrl(url: string, name: string): Promise<
     name,
     rootPath: '',
     schemas: [schemaFile],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Fetch a LinkML schema from a URL, validate it, resolve its imports, and
+ * wrap everything in a transient Project (no rootPath — the user can Save to
+ * a local folder later).
+ *
+ * Throws a user-friendly Error on CORS/network failures, non-schema content,
+ * or YAML parse errors.
+ */
+export async function openSchemaFromUrl(url: string, platform: PlatformAPI): Promise<Project> {
+  let content: string;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    }
+    content = await response.text();
+  } catch (err) {
+    if (err instanceof Error && (err.message.startsWith('HTTP ') || err.message.startsWith('Failed to fetch'))) {
+      const isCors = err.message === 'Failed to fetch';
+      throw new Error(
+        isCors
+          ? `Could not reach URL — the server may not allow cross-origin requests (CORS)`
+          : err.message
+      );
+    }
+    throw new Error(`Network error: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  if (!looksLikeLinkMLSchema(content)) {
+    throw new Error('URL does not appear to contain a LinkML schema (expected id: and classes:/prefixes: fields)');
+  }
+
+  const schema = parseYaml(content);
+
+  // Derive a clean filename for save purposes; keep sourceUrl for import resolution.
+  let filename: string;
+  try {
+    const pathname = new URL(url).pathname;
+    filename = pathname.split('/').filter(Boolean).pop() ?? 'schema.yaml';
+  } catch {
+    filename = 'schema.yaml';
+  }
+  if (!filename.endsWith('.yaml') && !filename.endsWith('.yml')) {
+    filename += '.yaml';
+  }
+
+  const projectName = schema.name || filename.replace(/\.ya?ml$/, '') || 'Untitled Schema';
+
+  const schemaFile: SchemaFile = {
+    id: crypto.randomUUID(),
+    filePath: filename,
+    schema,
+    isDirty: true,     // marks as unsaved so Save → prompts for local folder
+    canvasLayout: emptyCanvasLayout(),
+    isReadOnly: false,
+    sourceUrl: url,
+  };
+
+  // Resolve URL-relative imports (sourceUrl on schemaFile guides the resolver)
+  const importedFiles = await resolveImports([schemaFile], platform, '');
+  const allSchemas = [schemaFile, ...importedFiles];
+
+  return {
+    id: crypto.randomUUID(),
+    name: projectName,
+    rootPath: '',
+    schemas: allSchemas,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

@@ -11,6 +11,82 @@ export interface Toast {
   durationMs?: number;
 }
 
+const HIDDEN_EDGE_TYPES_KEY = 'linkml-editor-hidden-edge-types';
+const HIGHLIGHT_SETTINGS_KEY = 'linkml-editor-highlight-settings';
+const GROUP_BY_IMPORT_SOURCE_KEY = 'linkml-editor-group-by-import-source';
+const HOP_DIMMING_KEY = 'linkml-editor-hop-dimming';
+const TABLE_MODE_ENABLED_KEY = 'linkml-editor-table-mode-enabled';
+const RANGE_EDGES_MODE_KEY = 'linkml-editor-range-edges-mode';
+
+export type RangeEdgesMode = 'show' | 'inline' | 'auto';
+
+function loadGroupByImportSource(): boolean {
+  try {
+    const raw = localStorage.getItem(GROUP_BY_IMPORT_SOURCE_KEY);
+    if (raw !== null) return raw === 'true';
+  } catch { /* ignore */ }
+  return false;
+}
+
+function loadHopDimming(): { enabled: boolean; n: number } {
+  try {
+    const raw = localStorage.getItem(HOP_DIMMING_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        enabled: parsed.enabled ?? false,
+        n: typeof parsed.n === 'number' ? Math.max(1, Math.min(9, parsed.n)) : 2,
+      };
+    }
+  } catch { /* ignore */ }
+  return { enabled: false, n: 2 };
+}
+
+function loadTableModeEnabled(): boolean {
+  try {
+    const raw = localStorage.getItem(TABLE_MODE_ENABLED_KEY);
+    if (raw !== null) return JSON.parse(raw) === true;
+  } catch { /* ignore */ }
+  return false;
+}
+
+function loadRangeEdgesMode(): RangeEdgesMode {
+  try {
+    const raw = localStorage.getItem(RANGE_EDGES_MODE_KEY);
+    if (raw === 'show' || raw === 'inline' || raw === 'auto') return raw;
+  } catch { /* ignore */ }
+  return 'show';
+}
+
+function loadHiddenEdgeTypes(): Set<string> {
+  try {
+    const raw = localStorage.getItem(HIDDEN_EDGE_TYPES_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr as string[]);
+    }
+  } catch { /* ignore */ }
+  return new Set();
+}
+
+function loadHighlightSettings(): { onHover: boolean; onSelection: boolean } {
+  try {
+    const raw = localStorage.getItem(HIGHLIGHT_SETTINGS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        onHover: parsed.onHover ?? false,
+        onSelection: parsed.onSelection ?? true,
+      };
+    }
+  } catch { /* ignore */ }
+  return { onHover: false, onSelection: true };
+}
+
+function saveHighlightSettings(onHover: boolean, onSelection: boolean): void {
+  try { localStorage.setItem(HIGHLIGHT_SETTINGS_KEY, JSON.stringify({ onHover, onSelection })); } catch { /* ignore */ }
+}
+
 export interface UISlice {
   // State
   theme: Theme;
@@ -21,6 +97,24 @@ export interface UISlice {
   syncStatus: SyncStatus; // null = not in cloud mode
   /** Schema IDs that are hidden in the project panel / canvas */
   hiddenSchemaIds: Set<string>;
+  /** Edge types that are hidden on the canvas (filtered at render time, not from state) */
+  hiddenEdgeTypes: Set<string>;
+  /** Whether hovering a node highlights its edges and dims all others */
+  highlightOnHover: boolean;
+  /** Whether selecting a node highlights its edges and dims all others (sticky) */
+  highlightOnSelection: boolean;
+  /** Global rendering mode used when no view is active or the active view has no override */
+  globalRenderMode: 'canvas' | 'outline' | 'table';
+  /** When true, draws swimlane background regions grouping nodes by their import source file */
+  groupByImportSource: boolean;
+  /** Whether hop-distance dimming is active (B3). Off by default. */
+  hopDimmingEnabled: boolean;
+  /** Number of hops within which nodes/edges are kept at full opacity (B3). */
+  hopDimmingN: number;
+  /** Feature flag: enables the table rendering mode UI (C2). Off by default; toggle via localStorage. */
+  tableModeEnabled: boolean;
+  /** Global range-edge rendering mode: show edges, inline as chips, or auto-decide (B1). */
+  globalRangeEdgesMode: RangeEdgesMode;
 
   // Actions
   setTheme(theme: Theme): void;
@@ -33,6 +127,16 @@ export interface UISlice {
   setSchemaVisible(schemaId: string, visible: boolean): void;
   /** Bulk-set hidden IDs, typically called when loading a project manifest. */
   setHiddenSchemaIds(ids: Set<string>): void;
+  /** Toggle visibility for a single edge type. Persisted to localStorage. */
+  toggleEdgeTypeVisibility(type: string): void;
+  setHighlightOnHover(value: boolean): void;
+  setHighlightOnSelection(value: boolean): void;
+  setGlobalRenderMode(mode: 'canvas' | 'outline' | 'table'): void;
+  setGroupByImportSource(value: boolean): void;
+  setHopDimmingEnabled(value: boolean): void;
+  setHopDimmingN(n: number): void;
+  setTableModeEnabled(value: boolean): void;
+  setGlobalRangeEdgesMode(mode: RangeEdgesMode): void;
 }
 
 let toastCounter = 0;
@@ -45,6 +149,15 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   zoom: 1,
   syncStatus: null,
   hiddenSchemaIds: new Set(),
+  hiddenEdgeTypes: loadHiddenEdgeTypes(),
+  highlightOnHover: loadHighlightSettings().onHover,
+  highlightOnSelection: loadHighlightSettings().onSelection,
+  globalRenderMode: 'canvas',
+  groupByImportSource: loadGroupByImportSource(),
+  hopDimmingEnabled: loadHopDimming().enabled,
+  hopDimmingN: loadHopDimming().n,
+  tableModeEnabled: loadTableModeEnabled(),
+  globalRangeEdgesMode: loadRangeEdgesMode(),
 
   setTheme(theme) {
     set({ theme });
@@ -86,5 +199,63 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
 
   setHiddenSchemaIds(ids) {
     set({ hiddenSchemaIds: ids });
+  },
+
+  toggleEdgeTypeVisibility(type) {
+    set((state) => {
+      const next = new Set(state.hiddenEdgeTypes);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      try { localStorage.setItem(HIDDEN_EDGE_TYPES_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+      return { hiddenEdgeTypes: next };
+    });
+  },
+
+  setHighlightOnHover(value) {
+    set((state) => {
+      saveHighlightSettings(value, state.highlightOnSelection);
+      return { highlightOnHover: value };
+    });
+  },
+
+  setHighlightOnSelection(value) {
+    set((state) => {
+      saveHighlightSettings(state.highlightOnHover, value);
+      return { highlightOnSelection: value };
+    });
+  },
+
+  setGlobalRenderMode(mode) {
+    set({ globalRenderMode: mode });
+  },
+
+  setGroupByImportSource(value) {
+    try { localStorage.setItem(GROUP_BY_IMPORT_SOURCE_KEY, String(value)); } catch { /* ignore */ }
+    set({ groupByImportSource: value });
+  },
+
+  setHopDimmingEnabled(value) {
+    set((state) => {
+      try { localStorage.setItem(HOP_DIMMING_KEY, JSON.stringify({ enabled: value, n: state.hopDimmingN })); } catch { /* ignore */ }
+      return { hopDimmingEnabled: value };
+    });
+  },
+
+  setHopDimmingN(n) {
+    const clamped = Math.max(1, Math.min(9, n));
+    set((state) => {
+      try { localStorage.setItem(HOP_DIMMING_KEY, JSON.stringify({ enabled: state.hopDimmingEnabled, n: clamped })); } catch { /* ignore */ }
+      return { hopDimmingN: clamped };
+    });
+  },
+
+  setTableModeEnabled(value) {
+    try { localStorage.setItem(TABLE_MODE_ENABLED_KEY, JSON.stringify(value)); } catch { /* ignore */ }
+    set({ tableModeEnabled: value });
+  },
+
+  setGlobalRangeEdgesMode(mode) {
+    try { localStorage.setItem(RANGE_EDGES_MODE_KEY, mode); } catch { /* ignore */ }
+    set({ globalRangeEdgesMode: mode });
   },
 });

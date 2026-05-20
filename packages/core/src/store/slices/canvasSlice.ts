@@ -3,7 +3,7 @@ import type { Node, Edge, Viewport } from 'reactflow';
 
 export type CanvasNodeData = {
   entityId: string;
-  entityType: 'class' | 'enum' | 'importGroup';
+  entityType: 'class' | 'enum' | 'label';
   collapsed?: boolean;
 };
 
@@ -16,7 +16,6 @@ export interface CanvasSlice {
   selectedEdgeIds: string[];
   focusMode: FocusMode | null;
   focusNodeRequest: string | null;
-  collapsedGroups: Record<string, boolean>;
 
   // Actions
   setNodes(nodes: Node<CanvasNodeData>[]): void;
@@ -27,7 +26,6 @@ export interface CanvasSlice {
   clearSelection(): void;
   setFocusMode(mode: FocusMode | null): void;
   toggleNodeCollapsed(nodeId: string): void;
-  toggleCollapsedGroup(groupId: string): void;
   requestFocusNode(name: string | null): void;
 }
 
@@ -43,7 +41,6 @@ export const createCanvasSlice: StateCreator<CanvasSlice, [], [], CanvasSlice> =
   selectedEdgeIds: [],
   focusMode: null,
   focusNodeRequest: null,
-  collapsedGroups: {},
 
   setNodes(nodes) {
     set({ nodes });
@@ -84,15 +81,6 @@ export const createCanvasSlice: StateCreator<CanvasSlice, [], [], CanvasSlice> =
           ? { ...n, data: { ...n.data, collapsed: !n.data.collapsed } }
           : n
       ),
-    }));
-  },
-
-  toggleCollapsedGroup(groupId) {
-    set((state) => ({
-      collapsedGroups: {
-        ...state.collapsedGroups,
-        [groupId]: !state.collapsedGroups[groupId],
-      },
     }));
   },
 

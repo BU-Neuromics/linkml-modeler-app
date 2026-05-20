@@ -27,6 +27,19 @@ export function isUrlImport(importStr: string): boolean {
 }
 
 /**
+ * Resolves a relative import string against a base URL using the URL constructor.
+ * Adds `.yaml` extension if no extension is present.
+ */
+function resolveImportAsUrl(importStr: string, baseUrl: string): string {
+  const withExt = importStr.endsWith('.yaml') || importStr.endsWith('.yml') ? importStr : `${importStr}.yaml`;
+  try {
+    return new URL(withExt, baseUrl).href;
+  } catch {
+    return withExt;
+  }
+}
+
+/**
  * Resolves an import path relative to the schema file's directory.
  * Adds `.yaml` extension if no extension is present.
  */
@@ -163,12 +176,23 @@ export async function resolveImports(
 
   // Seed queue with unresolved imports from the provided schemas
   for (const schema of schemas) {
+    // When a schema was fetched from a URL but stored with a clean filePath,
+    // use sourceUrl as the base for resolving relative imports.
+    const urlBase = isUrlImport(schema.filePath)
+      ? schema.filePath
+      : (schema.sourceUrl && isUrlImport(schema.sourceUrl) ? schema.sourceUrl : null);
+
     for (const imp of schema.schema.imports) {
       if (isUrlImport(imp)) {
         if (!loaded.has(imp)) queue.push({ filePath: imp, depth: 1 });
       } else if (isLocalImport(imp)) {
-        const resolved = resolveImportPath(imp, schema.filePath, rootPath);
-        if (!loaded.has(resolved)) queue.push({ filePath: resolved, depth: 1 });
+        if (urlBase) {
+          const resolved = resolveImportAsUrl(imp, urlBase);
+          if (!loaded.has(resolved)) queue.push({ filePath: resolved, depth: 1 });
+        } else {
+          const resolved = resolveImportPath(imp, schema.filePath, rootPath);
+          if (!loaded.has(resolved)) queue.push({ filePath: resolved, depth: 1 });
+        }
       }
     }
   }
@@ -189,12 +213,22 @@ export async function resolveImports(
 
     // Queue transitive imports
     if (depth < maxDepth) {
+      // URL-loaded schemas have filePath = url; use URL resolution for their relative imports.
+      const transitiveUrlBase = isUrlImport(filePath)
+        ? filePath
+        : (file.sourceUrl && isUrlImport(file.sourceUrl) ? file.sourceUrl : null);
+
       for (const imp of file.schema.imports) {
         if (isUrlImport(imp)) {
           if (!loaded.has(imp)) queue.push({ filePath: imp, depth: depth + 1 });
         } else if (isLocalImport(imp)) {
-          const resolved = resolveImportPath(imp, filePath, rootPath);
-          if (!loaded.has(resolved)) queue.push({ filePath: resolved, depth: depth + 1 });
+          if (transitiveUrlBase) {
+            const resolved = resolveImportAsUrl(imp, transitiveUrlBase);
+            if (!loaded.has(resolved)) queue.push({ filePath: resolved, depth: depth + 1 });
+          } else {
+            const resolved = resolveImportPath(imp, filePath, rootPath);
+            if (!loaded.has(resolved)) queue.push({ filePath: resolved, depth: depth + 1 });
+          }
         }
       }
     }

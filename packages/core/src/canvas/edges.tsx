@@ -21,6 +21,9 @@ import {
 /** Bend-point data attached by deriveGraph when ELK routing is available. */
 export interface ElkRouteData {
   elkPoints?: Array<{ x: number; y: number }>;
+  /** Set by deriveGraph when multiple edges share the same source+target node pair. */
+  parallelIndex?: number;
+  parallelCount?: number;
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -87,18 +90,43 @@ function buildElkPath(
   return { path: d, labelX, labelY };
 }
 
+/** Pixels between adjacent parallel edges in the same source→target group. */
+const PARALLEL_STEP = 8;
+
 function edgePath(props: EdgeProps) {
   const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition } = props;
-  const elkPoints = (props.data as ElkRouteData | undefined)?.elkPoints;
+  const data = props.data as ElkRouteData | undefined;
+  const elkPoints = data?.elkPoints;
+
+  // Compute perpendicular offset so parallel edges between the same node pair fan out.
+  let ox = 0;
+  let oy = 0;
+  const pCount = data?.parallelCount ?? 1;
+  const pIndex = data?.parallelIndex ?? 0;
+  if (pCount > 1) {
+    const dx = targetX - sourceX;
+    const dy = targetY - sourceY;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len > 0) {
+      // Perpendicular unit vector (rotate 90° CCW)
+      const offset = (pIndex - (pCount - 1) / 2) * PARALLEL_STEP;
+      ox = (-dy / len) * offset;
+      oy = (dx / len) * offset;
+    }
+  }
+
   if (elkPoints && elkPoints.length > 0) {
-    return buildElkPath(sourceX, sourceY, targetX, targetY, elkPoints);
+    const pts = ox !== 0 || oy !== 0
+      ? elkPoints.map((p) => ({ x: p.x + ox, y: p.y + oy }))
+      : elkPoints;
+    return buildElkPath(sourceX + ox, sourceY + oy, targetX + ox, targetY + oy, pts);
   }
   const [path, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
+    sourceX: sourceX + ox,
+    sourceY: sourceY + oy,
     sourcePosition,
-    targetX,
-    targetY,
+    targetX: targetX + ox,
+    targetY: targetY + oy,
     targetPosition,
     borderRadius: 8,
   });
@@ -109,10 +137,12 @@ function EdgeLabel({
   x,
   y,
   label,
+  dimmed,
 }: {
   x: number;
   y: number;
   label?: string;
+  dimmed?: boolean;
 }) {
   if (!label) return null;
   return (
@@ -130,6 +160,8 @@ function EdgeLabel({
           color: 'var(--color-fg-secondary)',
           pointerEvents: 'all',
           cursor: 'default',
+          opacity: dimmed ? 0.15 : 1,
+          transition: 'opacity 0.15s',
         }}
         className="nodrag nopan"
       >
@@ -146,6 +178,8 @@ export interface RangeEdgeData extends ElkRouteData {
   required: boolean;
   multivalued: boolean;
   identifier: boolean;
+  /** Set by SchemaCanvas when this edge should be visually dimmed for highlight mode. */
+  dimmed?: boolean;
 }
 
 // ── range edge ─────────────────────────────────────────────────────────────────
@@ -154,6 +188,7 @@ export const RangeEdge = memo(function RangeEdge(props: EdgeProps) {
   const { path, labelX, labelY } = edgePath(props);
   const [hovered, setHovered] = useState(false);
   const data = props.data as RangeEdgeData | undefined;
+  const dimmed = data?.dimmed ?? false;
 
   const badges: string[] = [];
   if (data?.required) badges.push('R');
@@ -192,6 +227,8 @@ export const RangeEdge = memo(function RangeEdge(props: EdgeProps) {
             gap: 3,
             pointerEvents: 'all',
             cursor: 'default',
+            opacity: dimmed ? 0.15 : 1,
+            transition: 'opacity 0.15s',
           }}
           className="nodrag nopan"
           onMouseEnter={() => setHovered(true)}
@@ -283,6 +320,7 @@ export const RangeEdge = memo(function RangeEdge(props: EdgeProps) {
 // the triangle at the parent (UML convention: triangle points at parent).
 export const IsAEdge = memo(function IsAEdge(props: EdgeProps) {
   const { path, labelX, labelY } = edgePath(props);
+  const dimmed = (props.data as { dimmed?: boolean } | undefined)?.dimmed ?? false;
   return (
     <>
       <BaseEdge
@@ -290,7 +328,7 @@ export const IsAEdge = memo(function IsAEdge(props: EdgeProps) {
         markerStart={props.markerStart ?? 'url(#arrow-hollow-start)'}
         style={{ stroke: 'var(--color-accent-hover)', strokeWidth: 2 }}
       />
-      <EdgeLabel x={labelX} y={labelY} label={props.label as string | undefined} />
+      <EdgeLabel x={labelX} y={labelY} label={props.label as string | undefined} dimmed={dimmed} />
     </>
   );
 });
@@ -299,6 +337,7 @@ export const IsAEdge = memo(function IsAEdge(props: EdgeProps) {
 // Dashed line, hollow triangle at the mixin parent (same convention as is_a).
 export const MixinEdge = memo(function MixinEdge(props: EdgeProps) {
   const { path, labelX, labelY } = edgePath(props);
+  const dimmed = (props.data as { dimmed?: boolean } | undefined)?.dimmed ?? false;
   return (
     <>
       <BaseEdge
@@ -306,7 +345,7 @@ export const MixinEdge = memo(function MixinEdge(props: EdgeProps) {
         markerStart={props.markerStart ?? 'url(#arrow-hollow-start)'}
         style={{ stroke: 'var(--color-edge-mixin)', strokeWidth: 1.5, strokeDasharray: '6 3' }}
       />
-      <EdgeLabel x={labelX} y={labelY} label={props.label as string | undefined} />
+      <EdgeLabel x={labelX} y={labelY} label={props.label as string | undefined} dimmed={dimmed} />
     </>
   );
 });
@@ -315,13 +354,14 @@ export const MixinEdge = memo(function MixinEdge(props: EdgeProps) {
 // Dotted line, no arrowhead.
 export const UnionOfEdge = memo(function UnionOfEdge(props: EdgeProps) {
   const { path, labelX, labelY } = edgePath(props);
+  const dimmed = (props.data as { dimmed?: boolean } | undefined)?.dimmed ?? false;
   return (
     <>
       <BaseEdge
         path={path}
         style={{ stroke: 'var(--color-edge-union)', strokeWidth: 1.5, strokeDasharray: '2 4' }}
       />
-      <EdgeLabel x={labelX} y={labelY} label={props.label as string | undefined} />
+      <EdgeLabel x={labelX} y={labelY} label={props.label as string | undefined} dimmed={dimmed} />
     </>
   );
 });

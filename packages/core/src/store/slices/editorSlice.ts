@@ -5,6 +5,7 @@ export type ActiveEntity =
   | { type: 'slot'; className: string; slotName: string }
   | { type: 'enum'; enumName: string }
   | { type: 'edge'; edgeId: string }
+  | { type: 'label'; labelId: string }
   | null;
 
 export interface EditorSlice {
@@ -20,6 +21,8 @@ export interface EditorSlice {
   importDialogOpen: boolean;
   newSchemaDialogOpen: boolean;
   switchProjectDialogOpen: boolean;
+  openFromUrlDialogOpen: boolean;
+  commandPaletteOpen: boolean;
 
   // Actions
   setActiveEntity(entity: ActiveEntity): void;
@@ -34,6 +37,8 @@ export interface EditorSlice {
   setImportDialogOpen(open: boolean): void;
   setNewSchemaDialogOpen(open: boolean): void;
   setSwitchProjectDialogOpen(open: boolean): void;
+  setOpenFromUrlDialogOpen(open: boolean): void;
+  setCommandPaletteOpen(open: boolean): void;
 }
 
 export const createEditorSlice: StateCreator<EditorSlice, [], [], EditorSlice> = (set) => ({
@@ -48,6 +53,8 @@ export const createEditorSlice: StateCreator<EditorSlice, [], [], EditorSlice> =
   importDialogOpen: false,
   newSchemaDialogOpen: false,
   switchProjectDialogOpen: false,
+  openFromUrlDialogOpen: false,
+  commandPaletteOpen: false,
 
   setActiveEntity(entity) {
     set({ activeEntity: entity });
@@ -95,5 +102,13 @@ export const createEditorSlice: StateCreator<EditorSlice, [], [], EditorSlice> =
 
   setSwitchProjectDialogOpen(open) {
     set({ switchProjectDialogOpen: open });
+  },
+
+  setOpenFromUrlDialogOpen(open) {
+    set({ openFromUrlDialogOpen: open });
+  },
+
+  setCommandPaletteOpen(open) {
+    set({ commandPaletteOpen: open });
   },
 });

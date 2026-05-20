@@ -13,7 +13,7 @@ export {
   buildManifestData,
   applyManifestToSchemas,
 } from './io/editorManifest.js';
-export type { EditorManifestData, SchemaManifestEntry } from './io/editorManifest.js';
+export type { EditorManifestData, SchemaManifestEntry, ViewDefinition, ViewMember, ViewLayout, EdgeFilterSet } from './io/editorManifest.js';
 export {
   isLocalImport,
   resolveImportPath,
@@ -28,6 +28,6 @@ export * from './canvas/index.js';
 export * from './editor/index.js';
 export * from './validation/index.js';
 export { getRecentProjects, addRecentProject, removeRecentProject, clearRecentProjects } from './project/recentProjects.js';
-export { openProjectFromDirectory, createNewProject, loadDemoSchemaFromUrl } from './project/projectLoader.js';
+export { openProjectFromDirectory, createNewProject, loadDemoSchemaFromUrl, openSchemaFromUrl, looksLikeLinkMLSchema } from './project/projectLoader.js';
 export { GitHubAuth } from './auth/GitHubAuth.js';
 export type { GitHubSession, DeviceFlowHandle } from './auth/GitHubAuth.js';

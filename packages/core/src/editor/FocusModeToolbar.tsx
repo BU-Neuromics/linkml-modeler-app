@@ -1,21 +1,30 @@
 /**
- * FocusModeToolbar — M6 focus mode controls.
+ * FocusModeToolbar — ephemeral focus mode controls + "Save as View" shortcut.
  *
  * Provides:
  *  1. Subset-based focus: dropdown of available subsets → dim non-member classes
- *  2. Selection-based focus: "Focus Selection" button → isolate selected nodes + neighbors
+ *  2. Selection-based focus: "Focus Selection" button → isolate selected nodes
+ *  3. "Save as View" — persists current selection as a named View (A1)
  *
  * Placed as an overlay inside SchemaCanvas (or as a standalone toolbar strip).
  */
 import React, { useCallback, useMemo } from 'react';
 import { useAppStore } from '../store/index.js';
+import { usePlatform } from '../platform/PlatformContext.js';
+import { buildManifestData, writeEditorManifest } from '../io/editorManifest.js';
 import { Hexagon, X } from '../ui/icons/index.js';
 
 export function FocusModeToolbar() {
+  const platform = usePlatform();
   const activeSchemaFile = useAppStore((s) => s.getActiveSchema());
+  const activeProject = useAppStore((s) => s.activeProject);
+  const hiddenSchemaIds = useAppStore((s) => s.hiddenSchemaIds);
   const focusMode = useAppStore((s) => s.focusMode);
   const setFocusMode = useAppStore((s) => s.setFocusMode);
   const selectedNodeIds = useAppStore((s) => s.selectedNodeIds);
+  const views = useAppStore((s) => s.views);
+  const createView = useAppStore((s) => s.createView);
+  const setActiveViewId = useAppStore((s) => s.setActiveViewId);
 
   // Collect subsets from the active schema
   const subsets = useMemo(() => {
@@ -43,6 +52,28 @@ export function FocusModeToolbar() {
   }, [setFocusMode]);
 
   const handleExit = useCallback(() => setFocusMode(null), [setFocusMode]);
+
+  // Save current selection as a persistent named View
+  const handleSaveAsView = useCallback(() => {
+    if (!activeSchemaFile || !activeProject || selectedNodeIds.length === 0) return;
+    const schemaClasses = activeSchemaFile.schema.classes ?? {};
+    const schemaEnums = activeSchemaFile.schema.enums ?? {};
+    const members = selectedNodeIds
+      .filter((name) => name in schemaClasses || name in schemaEnums)
+      .map((name) => {
+        const isEnum = name in schemaEnums;
+        return { schemaFilePath: activeSchemaFile.filePath, name, kind: (isEnum ? 'enum' : 'class') as 'class' | 'enum' };
+      });
+    if (members.length === 0) return;
+    const view = createView({ name: `View ${views.length + 1}`, members });
+    setActiveViewId(view.id);
+    const nextViews = [...views, view];
+    writeEditorManifest(
+      platform,
+      activeProject.rootPath,
+      buildManifestData(activeProject, null, null, hiddenSchemaIds, nextViews, view.id)
+    );
+  }, [activeSchemaFile, activeProject, hiddenSchemaIds, selectedNodeIds, views, createView, setActiveViewId, platform]);
 
   if (!activeSchemaFile) return null;
 
@@ -90,6 +121,23 @@ export function FocusModeToolbar() {
         {selectedNodeIds.length > 0 && (
           <span style={styles.selCount}>{selectedNodeIds.length}</span>
         )}
+      </button>
+
+      {/* Save as View */}
+      <button
+        style={{
+          ...styles.saveViewBtn,
+          ...(selectedNodeIds.length === 0 ? styles.focusBtnDisabled : {}),
+        }}
+        onClick={handleSaveAsView}
+        disabled={selectedNodeIds.length === 0}
+        title={
+          selectedNodeIds.length === 0
+            ? 'Select nodes first to save them as a persistent view'
+            : `Save ${selectedNodeIds.length} selected node(s) as a named view`
+        }
+      >
+        + Save View
       </button>
 
       {/* Exit focus */}
@@ -174,5 +222,17 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
+  },
+  saveViewBtn: {
+    background: 'var(--color-bg-surface)',
+    border: '1px solid var(--color-border-default)',
+    color: 'var(--color-fg-secondary)',
+    borderRadius: 4,
+    padding: '3px 10px',
+    fontSize: 11,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
   },
 };

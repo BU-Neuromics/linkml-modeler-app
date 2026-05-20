@@ -7,8 +7,9 @@ import { createEditorSlice, type EditorSlice } from './slices/editorSlice.js';
 import { createGitSlice, type GitSlice } from './slices/gitSlice.js';
 import { createUISlice, type UISlice } from './slices/uiSlice.js';
 import { createValidationSlice, type ValidationSlice } from './slices/validationSlice.js';
+import { createViewsSlice, type ViewsSlice } from './slices/viewsSlice.js';
 
-export type AppStore = ProjectSlice & CanvasSlice & EditorSlice & GitSlice & UISlice & ValidationSlice;
+export type AppStore = ProjectSlice & CanvasSlice & EditorSlice & GitSlice & UISlice & ValidationSlice & ViewsSlice;
 
 export const useAppStore = create<AppStore>()(
   devtools(
@@ -20,6 +21,7 @@ export const useAppStore = create<AppStore>()(
         ...createGitSlice(...args),
         ...createUISlice(...args),
         ...createValidationSlice(...args),
+        ...createViewsSlice(...args),
       }),
       {
         // Only track schema-mutating state; skip canvas/UI ephemeral state
@@ -50,3 +52,4 @@ export * from './slices/editorSlice.js';
 export * from './slices/gitSlice.js';
 export * from './slices/uiSlice.js';
 export * from './slices/validationSlice.js';
+export * from './slices/viewsSlice.js';

@@ -352,6 +352,7 @@ classes:
         range: string
 `.trim();
 
+// ── 5. Self-reference suppression ────────────────────────────────────────────
 describe('Self-reference slot handling', () => {
   it('emits no edge with source === target for a self-ranging attribute', () => {
     const schema = parseYaml(SELF_REF_YAML);
@@ -380,5 +381,158 @@ describe('Self-reference slot handling', () => {
     // so no edge is expected for it either — but Node should have no range edges at all
     const nodeRangeEdges = graph.edges.filter((e) => e.type === 'range' && e.source === 'Node');
     expect(nodeRangeEdges).toHaveLength(0);
+  });
+});
+
+// ── 6. hiddenEdgeTypes filtering ─────────────────────────────────────────────
+describe('deriveGraph hiddenEdgeTypes filtering (B2)', () => {
+  const FILTER_YAML = `
+id: https://example.org/filtertest
+name: filtertest
+prefixes:
+  linkml: https://w3id.org/linkml/
+default_prefix: filtertest
+imports:
+  - linkml:types
+classes:
+  Base:
+    abstract: true
+  Child:
+    is_a: Base
+  Mixin:
+    mixin: true
+  User:
+    is_a: Child
+    mixins:
+      - Mixin
+    attributes:
+      profile:
+        range: Profile
+  Profile:
+    attributes:
+      name:
+        range: string
+  Group:
+    union_of:
+      - User
+      - Profile
+`.trim();
+
+  it('emits all edge types by default (no hiddenEdgeTypes)', () => {
+    const schema = parseYaml(FILTER_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {});
+    const types = new Set(graph.edges.map((e) => e.type));
+    expect(types.has('is_a')).toBe(true);
+    expect(types.has('mixin')).toBe(true);
+    expect(types.has('range')).toBe(true);
+    expect(types.has('union_of')).toBe(true);
+  });
+
+  it('hides is_a edges when is_a is in hiddenEdgeTypes', () => {
+    const schema = parseYaml(FILTER_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(['is_a']));
+    const isaEdges = graph.edges.filter((e) => e.type === 'is_a');
+    expect(isaEdges).toHaveLength(0);
+    expect(graph.edges.some((e) => e.type === 'mixin')).toBe(true);
+    expect(graph.edges.some((e) => e.type === 'range')).toBe(true);
+  });
+
+  it('hides mixin edges when mixin is in hiddenEdgeTypes', () => {
+    const schema = parseYaml(FILTER_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(['mixin']));
+    expect(graph.edges.filter((e) => e.type === 'mixin')).toHaveLength(0);
+    expect(graph.edges.some((e) => e.type === 'is_a')).toBe(true);
+  });
+
+  it('hides range edges when range is in hiddenEdgeTypes', () => {
+    const schema = parseYaml(FILTER_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(['range']));
+    expect(graph.edges.filter((e) => e.type === 'range')).toHaveLength(0);
+    expect(graph.edges.some((e) => e.type === 'is_a')).toBe(true);
+  });
+
+  it('hides union_of edges when union_of is in hiddenEdgeTypes', () => {
+    const schema = parseYaml(FILTER_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(['union_of']));
+    expect(graph.edges.filter((e) => e.type === 'union_of')).toHaveLength(0);
+    expect(graph.edges.some((e) => e.type === 'is_a')).toBe(true);
+  });
+
+  it('hides multiple edge types simultaneously', () => {
+    const schema = parseYaml(FILTER_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(['is_a', 'mixin', 'range']));
+    expect(graph.edges.filter((e) => e.type === 'is_a')).toHaveLength(0);
+    expect(graph.edges.filter((e) => e.type === 'mixin')).toHaveLength(0);
+    expect(graph.edges.filter((e) => e.type === 'range')).toHaveLength(0);
+    expect(graph.edges.some((e) => e.type === 'union_of')).toBe(true);
+  });
+
+  it('emits no edges when all types are hidden', () => {
+    const schema = parseYaml(FILTER_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(['is_a', 'mixin', 'range', 'union_of']));
+    expect(graph.edges).toHaveLength(0);
+  });
+});
+
+// ── rangeEdgesMode inline/auto suppression (B1) ──────────────────────────────
+describe('deriveGraph rangeEdgesMode (B1)', () => {
+  const INLINE_YAML = `
+id: https://example.org/inlinetest
+name: inlinetest
+prefixes:
+  linkml: https://w3id.org/linkml/
+default_prefix: inlinetest
+imports:
+  - linkml:types
+classes:
+  Author:
+    attributes:
+      name:
+        range: string
+  Book:
+    attributes:
+      author:
+        range: Author
+      title:
+        range: string
+`.trim();
+
+  it('emits range edges in show mode (default)', () => {
+    const schema = parseYaml(INLINE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(), 'show');
+    expect(graph.edges.filter((e) => e.type === 'range')).toHaveLength(1);
+  });
+
+  it('suppresses range edges in inline mode', () => {
+    const schema = parseYaml(INLINE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(), 'inline');
+    expect(graph.edges.filter((e) => e.type === 'range')).toHaveLength(0);
+    // Non-range edges are unaffected
+    expect(graph.edges.filter((e) => e.type !== 'range')).toHaveLength(0);
+  });
+
+  it('suppresses range edges in auto mode', () => {
+    const schema = parseYaml(INLINE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(), 'auto');
+    expect(graph.edges.filter((e) => e.type === 'range')).toHaveLength(0);
+  });
+
+  it('marks rangeIsEntity on slots whose range is a class', () => {
+    const schema = parseYaml(INLINE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(), 'inline');
+    const bookNode = graph.nodes.find((n) => n.id === 'Book');
+    const bookData = bookNode?.data as import('../canvas/ClassNode.js').ClassNodeData;
+    const authorSlot = bookData.resolvedSlots?.find((r) => r.slot.name === 'author');
+    const titleSlot = bookData.resolvedSlots?.find((r) => r.slot.name === 'title');
+    expect(authorSlot?.rangeIsEntity).toBe(true);  // Author is a class
+    expect(titleSlot?.rangeIsEntity).toBeFalsy();   // string is not in schema.classes
+  });
+
+  it('passes rangeEdgesMode through to ClassNodeData', () => {
+    const schema = parseYaml(INLINE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(), 'inline');
+    const bookNode = graph.nodes.find((n) => n.id === 'Book');
+    const bookData = bookNode?.data as import('../canvas/ClassNode.js').ClassNodeData;
+    expect(bookData.rangeEdgesMode).toBe('inline');
   });
 });

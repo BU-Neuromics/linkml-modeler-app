@@ -30,7 +30,8 @@ import 'reactflow/dist/style.css';
 
 import ClassNode from './ClassNode.js';
 import EnumNode from './EnumNode.js';
-import ImportGroupNode from './ImportGroupNode.js';
+import LabelNode from './LabelNode.js';
+import { ImportSourceOverlay } from './ImportSourceOverlay.js';
 import { Diamond, Hexagon, Plus } from '../ui/icons/index.js';
 import { edgeTypes, EdgeMarkerDefs } from './edges.js';
 import { deriveGraph } from './deriveGraph.js';
@@ -39,8 +40,17 @@ import { useAppStore } from '../store/index.js';
 import { usePlatform } from '../platform/PlatformContext.js';
 import { collectReferencedImportedEntities } from '../io/importResolver.js';
 import { buildManifestData, writeEditorManifest } from '../io/editorManifest.js';
-import type { CanvasLayout } from '../model/index.js';
+import type { CanvasLayout, TextLabel } from '../model/index.js';
 import { emptyClassDefinition, emptyEnumDefinition } from '../model/index.js';
+import {
+  buildAdjacency,
+  getAncestors,
+  getDescendants,
+  getDirectNeighbors,
+  getNHopNeighbors,
+  nodeIdToEntityName,
+  applyOp,
+} from './selectionOps.js';
 
 // ── CSS token reader (for SVG/canvas contexts that require concrete color values) ──
 function cssToken(name: string): string {
@@ -52,7 +62,7 @@ function cssToken(name: string): string {
 const nodeTypes = {
   classNode: ClassNode,
   enumNode: EnumNode,
-  importGroupNode: ImportGroupNode,
+  labelNode: LabelNode,
 } as unknown as NodeTypes;
 
 // ── Context menu ──────────────────────────────────────────────────────────────
@@ -69,14 +79,30 @@ function CanvasContextMenu({
   onClose,
   onAddClass,
   onAddEnum,
+  onAddLabel,
   onDeleteNode,
+  subsets,
+  onAddToSubset,
+  onRemoveFromSubset,
+  entitySubsets,
 }: {
   menu: ContextMenu;
   onClose: () => void;
   onAddClass: (pos: XYPosition) => void;
   onAddEnum: (pos: XYPosition) => void;
+  onAddLabel: (pos: XYPosition) => void;
   onDeleteNode: (nodeId: string) => void;
+  subsets: string[];
+  onAddToSubset: (nodeId: string, subsetName: string) => void;
+  onRemoveFromSubset: (nodeId: string, subsetName: string) => void;
+  entitySubsets: string[];
 }) {
+  const [subsetMenuOpen, setSubsetMenuOpen] = React.useState<'add' | 'remove' | null>(null);
+  const isClass = menu.nodeType === 'classNode';
+  const isEnum = menu.nodeType === 'enumNode';
+  const canEditSubsets = (isClass || isEnum) && subsets.length > 0;
+  const addable = subsets.filter((s) => !entitySubsets.includes(s));
+  const removable = entitySubsets;
   return (
     <div
       style={{
@@ -84,13 +110,59 @@ function CanvasContextMenu({
         left: menu.x,
         top: menu.y,
       }}
-      onMouseLeave={onClose}
+      onMouseLeave={() => { setSubsetMenuOpen(null); onClose(); }}
     >
       {menu.nodeId ? (
         <>
           <div style={ctxStyles.item} onClick={() => { onDeleteNode(menu.nodeId!); onClose(); }}>
-            🗑 Delete {menu.nodeType === 'enumNode' ? 'enum' : 'class'}
+            🗑 Delete {menu.nodeType === 'enumNode' ? 'enum' : menu.nodeType === 'labelNode' ? 'label' : 'class'}
           </div>
+          {canEditSubsets && addable.length > 0 && (
+            <div style={ctxStyles.submenuHost}>
+              <div
+                style={ctxStyles.item}
+                onMouseEnter={() => setSubsetMenuOpen('add')}
+              >
+                <span style={{ marginRight: 6 }}>⊂</span> Add to subset ▸
+              </div>
+              {subsetMenuOpen === 'add' && (
+                <div style={ctxStyles.submenu}>
+                  {addable.map((sn) => (
+                    <div
+                      key={sn}
+                      style={ctxStyles.item}
+                      onClick={() => { onAddToSubset(menu.nodeId!, sn); onClose(); }}
+                    >
+                      {sn}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {canEditSubsets && removable.length > 0 && (
+            <div style={ctxStyles.submenuHost}>
+              <div
+                style={ctxStyles.item}
+                onMouseEnter={() => setSubsetMenuOpen('remove')}
+              >
+                <span style={{ marginRight: 6 }}>⊄</span> Remove from subset ▸
+              </div>
+              {subsetMenuOpen === 'remove' && (
+                <div style={ctxStyles.submenu}>
+                  {removable.map((sn) => (
+                    <div
+                      key={sn}
+                      style={ctxStyles.item}
+                      onClick={() => { onRemoveFromSubset(menu.nodeId!, sn); onClose(); }}
+                    >
+                      {sn}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -99,6 +171,9 @@ function CanvasContextMenu({
           </div>
           <div style={ctxStyles.item} onClick={() => { onAddEnum(menu.canvasPos); onClose(); }}>
             <Diamond size={13} style={{ marginRight: 6 }} /> Add Enum
+          </div>
+          <div style={ctxStyles.item} onClick={() => { onAddLabel(menu.canvasPos); onClose(); }}>
+            <span style={{ marginRight: 6, fontSize: 13 }}>T</span> Add Label
           </div>
         </>
       )}
@@ -115,7 +190,7 @@ const ctxStyles: Record<string, React.CSSProperties> = {
     boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
     zIndex: 'var(--z-modal)' as unknown as number,
     minWidth: 160,
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   item: {
     padding: '8px 14px',
@@ -126,6 +201,21 @@ const ctxStyles: Record<string, React.CSSProperties> = {
     userSelect: 'none',
     display: 'flex',
     alignItems: 'center',
+  },
+  submenuHost: {
+    position: 'relative',
+  },
+  submenu: {
+    position: 'absolute',
+    left: '100%',
+    top: 0,
+    background: 'var(--color-bg-surface)',
+    border: '1px solid var(--color-border-default)',
+    borderRadius: 6,
+    boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+    minWidth: 140,
+    zIndex: 1,
+    overflow: 'hidden',
   },
 };
 
@@ -231,19 +321,28 @@ function SchemaCanvasInner() {
   const updateNodePosition = useAppStore((s) => s.updateNodePosition);
   const setViewport = useAppStore((s) => s.setViewport);
   const toggleNodeCollapsed = useAppStore((s) => s.toggleNodeCollapsed);
-  const collapsedGroups = useAppStore((s) => s.collapsedGroups);
   const storeNodes = useAppStore((s) => s.nodes);
   const storeEdges = useAppStore((s) => s.edges);
   const viewport = useAppStore((s) => s.viewport);
   const focusMode = useAppStore((s) => s.focusMode);
+  const views = useAppStore((s) => s.views);
+  const activeViewId = useAppStore((s) => s.activeViewId);
   const focusNodeRequest = useAppStore((s) => s.focusNodeRequest);
   const requestFocusNode = useAppStore((s) => s.requestFocusNode);
   const hiddenSchemaIds = useAppStore((s) => s.hiddenSchemaIds);
   const updateCanvasLayout = useAppStore((s) => s.updateCanvasLayout);
   const setSelection = useAppStore((s) => s.setSelection);
+  const selectedNodeIds = useAppStore((s) => s.selectedNodeIds);
   const setActiveEntity = useAppStore((s) => s.setActiveEntity);
   const clearActiveEntity = useAppStore((s) => s.clearActiveEntity);
   const activeEntity = useAppStore((s) => s.activeEntity);
+  const hiddenEdgeTypes = useAppStore((s) => s.hiddenEdgeTypes);
+  const globalRangeEdgesMode = useAppStore((s) => s.globalRangeEdgesMode);
+  const highlightOnHover = useAppStore((s) => s.highlightOnHover);
+  const highlightOnSelection = useAppStore((s) => s.highlightOnSelection);
+  const groupByImportSource = useAppStore((s) => s.groupByImportSource);
+  const hopDimmingEnabled = useAppStore((s) => s.hopDimmingEnabled);
+  const hopDimmingN = useAppStore((s) => s.hopDimmingN);
 
   // Schema mutations
   const addClass = useAppStore((s) => s.addClass);
@@ -253,23 +352,31 @@ function SchemaCanvasInner() {
   const updateClass = useAppStore((s) => s.updateClass);
   const autoAddImportForRange = useAppStore((s) => s.autoAddImportForRange);
 
+  // Subset mutations (A4)
+  const addEntityToSubset = useAppStore((s) => s.addEntityToSubset);
+  const removeEntityFromSubset = useAppStore((s) => s.removeEntityFromSubset);
+
+  // Label mutations
+  const addLabelToCanvas = useAppStore((s) => s.addLabelToCanvas);
+  const updateLabelInCanvas = useAppStore((s) => s.updateLabelInCanvas);
+  const deleteLabelFromCanvas = useAppStore((s) => s.deleteLabelFromCanvas);
+
   // Local state
   const [localLayout, setLocalLayout] = useState<CanvasLayout>({
     nodes: {},
     viewport: { x: 0, y: 0, zoom: 1 },
   });
   const layoutRanRef = useRef(false);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [highlightPinnedNodeId, setHighlightPinnedNodeId] = useState<string | null>(null);
 
   // Refs for manifest writing — always up to date, no closure staleness
   const localLayoutRef = useRef(localLayout);
-  const manifestWriteStateRef = useRef({ activeProject, activeSchemaId, hiddenSchemaIds, platform });
+  const manifestWriteStateRef = useRef({ activeProject, activeSchemaId, hiddenSchemaIds, platform, views, activeViewId });
   const manifestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useLayoutEffect(() => {
-    localLayoutRef.current = localLayout;
-  }, [localLayout]);
-  useLayoutEffect(() => {
-    manifestWriteStateRef.current = { activeProject, activeSchemaId, hiddenSchemaIds, platform };
-  }, [activeProject, activeSchemaId, hiddenSchemaIds, platform]);
+    manifestWriteStateRef.current = { activeProject, activeSchemaId, hiddenSchemaIds, platform, views, activeViewId };
+  }, [activeProject, activeSchemaId, hiddenSchemaIds, platform, views, activeViewId]);
 
   // Save layout to store when active schema changes (before the new schema loads)
   const prevActiveSchemaIdRef = useRef<string | null>(null);
@@ -290,6 +397,27 @@ function SchemaCanvasInner() {
 
   const isReadOnly = activeSchemaFile?.isReadOnly ?? false;
 
+  // Subset names for context menu (A4)
+  const activeSubsets = useMemo(
+    () => (activeSchemaFile && !isReadOnly ? Object.keys(activeSchemaFile.schema.subsets) : []),
+    [activeSchemaFile, isReadOnly]
+  );
+
+  // Derive labels: store provides text/metadata; labelDragPositions overrides positions during active drags.
+  // No effect needed — useMemo reacts to store and drag state changes automatically.
+  const storeLabels = activeSchemaFile?.canvasLayout.labels;
+  const [labelDragPositions, setLabelDragPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const effectiveLabels = useMemo(() => {
+    const labels = storeLabels ?? [];
+    if (Object.keys(labelDragPositions).length === 0) return labels;
+    return labels.map((l) => (labelDragPositions[l.id] ? { ...l, ...labelDragPositions[l.id] } : l));
+  }, [storeLabels, labelDragPositions]);
+
+  // Keep localLayoutRef current including effective labels for manifest writes and schema-switch commits.
+  useLayoutEffect(() => {
+    localLayoutRef.current = { ...localLayout, labels: effectiveLabels };
+  }, [localLayout, effectiveLabels]);
+
   // Collect only referenced imported entities (not all entities from imported schemas)
   const ghostEntities = useMemo(
     () =>
@@ -308,11 +436,17 @@ function SchemaCanvasInner() {
     return merged;
   }, [activeProject?.schemas]);
 
-  // Derive graph (with ghost nodes grouped by source schema)
+  // Per-view range-edges override; falls back to global setting (B1)
+  const effectiveRangeEdgesMode = useMemo(() => {
+    const activeView = views.find((v) => v.id === activeViewId);
+    return activeView?.edgeFilters?.rangeEdges ?? globalRangeEdgesMode;
+  }, [views, activeViewId, globalRangeEdgesMode]);
+
+  // Derive graph (imported entities rendered as ordinary flat nodes)
   const { nodes: derivedNodes, edges: derivedEdges } = useMemo(() => {
     if (!activeSchemaFile) return { nodes: [], edges: [] };
-    return deriveGraph(activeSchemaFile.schema, localLayout, {}, ghostEntities, collapsedGroups, allSchemaSlots);
-  }, [activeSchemaFile, ghostEntities, localLayout, collapsedGroups, allSchemaSlots]);
+    return deriveGraph(activeSchemaFile.schema, { ...localLayout, labels: effectiveLabels }, {}, ghostEntities, allSchemaSlots, hiddenEdgeTypes, effectiveRangeEdgesMode);
+  }, [activeSchemaFile, ghostEntities, localLayout, effectiveLabels, allSchemaSlots, hiddenEdgeTypes, effectiveRangeEdgesMode]);
 
   useEffect(() => {
     setNodes(derivedNodes);
@@ -327,53 +461,55 @@ function SchemaCanvasInner() {
     if (hasLayoutData) {
       void Promise.resolve(activeSchemaFile.canvasLayout).then(setLocalLayout);
     } else {
-      void runAutoLayout(activeSchemaFile.schema, {}, ghostEntities).then((layout) => {
+      void runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes, effectiveRangeEdgesMode).then((layout) => {
         setLocalLayout(layout);
         setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 100);
       });
     }
-  }, [activeSchemaFile, ghostEntities, fitView]);
+  }, [activeSchemaFile, ghostEntities, hiddenEdgeTypes, effectiveRangeEdgesMode, fitView]);
 
   useEffect(() => {
     layoutRanRef.current = false;
   }, [activeSchemaId]);
 
-  // Re-layout when new ghost entities appear that have no saved position
-  const prevGhostIdsRef = useRef<Set<string>>(new Set());
+  // Re-layout when new imported entities appear that have no saved position
+  const prevImportedIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!activeSchemaFile || ghostEntities.length === 0) {
-      prevGhostIdsRef.current = new Set();
+      prevImportedIdsRef.current = new Set();
       return;
     }
-    const currentIds = new Set(ghostEntities.map((e) => `ghost__${e.name}`));
-    const prevIds = prevGhostIdsRef.current;
+    const currentIds = new Set(ghostEntities.map((e) => e.name));
+    const prevIds = prevImportedIdsRef.current;
     const hasNew = [...currentIds].some((id) => !prevIds.has(id));
-    prevGhostIdsRef.current = currentIds;
+    prevImportedIdsRef.current = currentIds;
     if (!hasNew) return;
 
-    // Check if any new ghost nodes lack saved layout positions
+    // Check if any new imported nodes lack saved layout positions
     const hasUnsaved = [...currentIds].some(
       (id) => !prevIds.has(id) && !localLayoutRef.current.nodes[id]
     );
     if (!hasUnsaved) return;
 
-    // Re-run auto-layout to incorporate the new ghost nodes
-    runAutoLayout(activeSchemaFile.schema, {}, ghostEntities).then((layout) => {
-      // Merge: keep existing user-adjusted positions, add new ghost positions
+    // Re-run auto-layout to incorporate the new imported nodes
+    runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes, effectiveRangeEdgesMode).then((layout) => {
+      // Merge: keep existing user-adjusted positions, add new imported positions
       setLocalLayout((prev) => ({
         nodes: { ...layout.nodes, ...prev.nodes },
         viewport: prev.viewport,
       }));
       setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 150);
     });
-  }, [activeSchemaFile, ghostEntities, fitView]);
+  }, [activeSchemaFile, ghostEntities, hiddenEdgeTypes, effectiveRangeEdgesMode, fitView]);
 
   // Zoom to node when a focus request is pending
   useEffect(() => {
     if (!focusNodeRequest) return;
-    const node = storeNodes.find((n) => n.id === focusNodeRequest);
+    // Try plain id first, then ghost__ prefix (for chips that reference imported entities)
+    const node = storeNodes.find((n) => n.id === focusNodeRequest)
+      ?? storeNodes.find((n) => n.id === `ghost__${focusNodeRequest}`);
     if (node) {
-      fitView({ nodes: [{ id: focusNodeRequest }], padding: 0.4, duration: 400, maxZoom: 1.5 });
+      fitView({ nodes: [{ id: node.id }], padding: 0.4, duration: 400, maxZoom: 1.5 });
       requestFocusNode(null);
     }
     // If node not found yet (e.g., schema is still switching), keep request pending
@@ -383,20 +519,20 @@ function SchemaCanvasInner() {
   const scheduleManifestWrite = useCallback(() => {
     if (manifestTimerRef.current) clearTimeout(manifestTimerRef.current);
     manifestTimerRef.current = setTimeout(() => {
-      const { activeProject, activeSchemaId, hiddenSchemaIds, platform } = manifestWriteStateRef.current;
+      const { activeProject, activeSchemaId, hiddenSchemaIds, platform, views, activeViewId } = manifestWriteStateRef.current;
       if (!activeProject?.rootPath) return;
-      const manifest = buildManifestData(activeProject, activeSchemaId, localLayoutRef.current, hiddenSchemaIds);
+      const manifest = buildManifestData(activeProject, activeSchemaId, localLayoutRef.current, hiddenSchemaIds, views, activeViewId);
       writeEditorManifest(platform, activeProject.rootPath, manifest);
     }, 1000);
   }, []);
 
   const handleAutoLayout = useCallback(async () => {
     if (!activeSchemaFile) return;
-    const layout = await runAutoLayout(activeSchemaFile.schema, {}, ghostEntities);
+    const layout = await runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes, effectiveRangeEdgesMode);
     setLocalLayout(layout);
     setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 100);
     scheduleManifestWrite();
-  }, [activeSchemaFile, ghostEntities, fitView, scheduleManifestWrite]);
+  }, [activeSchemaFile, ghostEntities, hiddenEdgeTypes, effectiveRangeEdgesMode, fitView, scheduleManifestWrite]);
 
   // ── ReactFlow event handlers ──────────────────────────────────────────────
 
@@ -406,22 +542,39 @@ function SchemaCanvasInner() {
       let positionChanged = false;
       for (const change of changes) {
         if (change.type === 'position' && change.position) {
-          setLocalLayout((prev) => ({
-            ...prev,
-            nodes: {
-              ...prev.nodes,
-              [change.id]: { x: change.position!.x, y: change.position!.y },
-            },
-            // Any node drag invalidates all ELK bend points (routing is now stale)
-            edges: undefined,
-          }));
-          updateNodePosition(change.id, change.position.x, change.position.y);
-          positionChanged = true;
+          if (change.id.startsWith('label__')) {
+            const labelId = change.id.slice('label__'.length);
+            setLabelDragPositions((prev) => ({
+              ...prev,
+              [labelId]: { x: change.position!.x, y: change.position!.y },
+            }));
+            // Commit final position to store on drag end, then clear local drag state
+            if (!change.dragging && activeSchemaId) {
+              updateLabelInCanvas(activeSchemaId, labelId, { x: change.position!.x, y: change.position!.y });
+              setLabelDragPositions((prev) => {
+                const next = { ...prev };
+                delete next[labelId];
+                return next;
+              });
+            }
+            positionChanged = true;
+          } else {
+            setLocalLayout((prev) => ({
+              ...prev,
+              nodes: {
+                ...prev.nodes,
+                [change.id]: { x: change.position!.x, y: change.position!.y },
+              },
+              edges: undefined,
+            }));
+            updateNodePosition(change.id, change.position.x, change.position.y);
+            positionChanged = true;
+          }
         }
       }
       if (positionChanged) scheduleManifestWrite();
     },
-    [storeNodes, setNodes, updateNodePosition, scheduleManifestWrite]
+    [storeNodes, setNodes, updateNodePosition, scheduleManifestWrite, activeSchemaId, updateLabelInCanvas]
   );
 
   const onEdgesChange: OnEdgesChange = useCallback(
@@ -438,25 +591,40 @@ function SchemaCanvasInner() {
     [setViewport, scheduleManifestWrite]
   );
 
-  // Double-click → collapse/expand entity nodes (import groups handle their own click)
+  // Node hover → hover highlight
+  const onNodeMouseEnter = useCallback((_: React.MouseEvent, node: Node) => {
+    setHoveredNodeId(node.id);
+  }, []);
+
+  const onNodeMouseLeave = useCallback(() => {
+    setHoveredNodeId(null);
+  }, []);
+
+  // Double-click → collapse/expand entity nodes (import groups and labels handle their own click)
   const onNodeDoubleClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      if (node.type !== 'importGroupNode') {
+      if (node.type !== 'importGroupNode' && node.type !== 'labelNode') {
         toggleNodeCollapsed(node.id);
       }
     },
     [toggleNodeCollapsed]
   );
 
-  // Single click on node → select entity
+  // Single click on node → select entity + pin highlight
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       const { entityType, entityId } = node.data as { entityType: string; entityId: string };
       if (entityType === 'class') {
         setActiveEntity({ type: 'class', className: entityId });
+        setHighlightPinnedNodeId(node.id);
       } else if (entityType === 'enum') {
         setActiveEntity({ type: 'enum', enumName: entityId });
+        setHighlightPinnedNodeId(node.id);
+      } else if (entityType === 'label') {
+        setActiveEntity({ type: 'label', labelId: entityId });
+        setHighlightPinnedNodeId(null);
       }
+      // importGroupNode clicks don't change the active entity
     },
     [setActiveEntity]
   );
@@ -480,22 +648,19 @@ function SchemaCanvasInner() {
     [setSelection]
   );
 
-  // Click on pane → deselect
+  // Click on pane → deselect + clear sticky highlight
   const onPaneClick = useCallback(() => {
     clearActiveEntity();
     setContextMenu(null);
+    setHighlightPinnedNodeId(null);
   }, [clearActiveEntity]);
 
   // Connect (drag handle-to-handle) → create is_a relationship
   const onConnect: OnConnect = useCallback(
     (connection) => {
       if (isReadOnly || !activeSchemaId || !connection.source || !connection.target) return;
-      // Ghost node IDs are prefixed with 'ghost__'; strip it to get the real class name
-      const targetName = connection.target.startsWith('ghost__')
-        ? connection.target.slice('ghost__'.length)
-        : connection.target;
-      autoAddImportForRange(activeSchemaId, targetName);
-      updateClass(activeSchemaId, connection.source, { isA: targetName });
+      autoAddImportForRange(activeSchemaId, connection.target);
+      updateClass(activeSchemaId, connection.source, { isA: connection.target });
     },
     [isReadOnly, activeSchemaId, updateClass, autoAddImportForRange]
   );
@@ -570,16 +735,42 @@ function SchemaCanvasInner() {
     [activeSchemaId, activeProject, addEnum, setActiveEntity]
   );
 
+  // Add label at position
+  const handleAddLabel = useCallback(
+    (pos: XYPosition) => {
+      if (!activeSchemaId) return;
+      const id = crypto.randomUUID();
+      const label: TextLabel = {
+        id,
+        text: 'Label',
+        x: pos.x,
+        y: pos.y,
+        fontSize: 14,
+        locked: false,
+      };
+      addLabelToCanvas(activeSchemaId, label);
+      setActiveEntity({ type: 'label', labelId: id });
+    },
+    [activeSchemaId, addLabelToCanvas, setActiveEntity]
+  );
+
   // Delete node from context menu
   const handleDeleteNode = useCallback(
     (nodeId: string) => {
       if (!activeSchemaId) return;
+      // Label nodes have a 'label__' prefix
+      if (nodeId.startsWith('label__')) {
+        const labelId = nodeId.slice('label__'.length);
+        deleteLabelFromCanvas(activeSchemaId, labelId);
+        clearActiveEntity();
+        return;
+      }
       const schema = activeProject?.schemas.find((s) => s.id === activeSchemaId)?.schema;
       if (!schema) return;
       const type = nodeId in schema.classes ? 'class' : 'enum';
       setDeleteTarget({ name: nodeId, type });
     },
-    [activeSchemaId, activeProject]
+    [activeSchemaId, activeProject, deleteLabelFromCanvas, clearActiveEntity]
   );
 
   const confirmDelete = useCallback(() => {
@@ -620,15 +811,19 @@ function SchemaCanvasInner() {
             setDeleteTarget({ name: activeEntity.className, type: 'class' });
           } else if (activeEntity?.type === 'enum') {
             setDeleteTarget({ name: activeEntity.enumName, type: 'enum' });
+          } else if (activeEntity?.type === 'label' && activeSchemaId) {
+            deleteLabelFromCanvas(activeSchemaId, activeEntity.labelId);
+            clearActiveEntity();
           }
         }
         return;
       }
 
-      // Escape → deselect / exit focus mode
+      // Escape → deselect / exit focus mode / clear sticky highlight
       if (e.key === 'Escape') {
         clearActiveEntity();
         useAppStore.getState().setFocusMode(null);
+        setHighlightPinnedNodeId(null);
         return;
       }
 
@@ -645,12 +840,79 @@ function SchemaCanvasInner() {
         setSelection(storeNodes.map((n) => n.id), []);
         return;
       }
+
+      // A3 selection neighborhood shortcuts (only when selection is non-empty)
+      if (selectedNodeIds.length > 0 && !e.ctrlKey && !e.metaKey) {
+        if (e.key === 'n' || e.key === 'N' || e.key === 'a' || e.key === 'A' || e.key === 'd' || e.key === 'D') {
+          const sf = activeProject?.schemas.find((s) => s.id === activeSchemaId);
+          if (sf) {
+            const ghosts = collectReferencedImportedEntities(sf, activeProject!.schemas);
+            const kbGhostNames = new Set(ghosts.map((g) => g.name));
+            const adj = buildAdjacency(sf.schema, kbGhostNames);
+            const additive = e.shiftKey;
+            e.preventDefault();
+            let newIds: string[];
+            if (e.key === 'n' || e.key === 'N') {
+              newIds = applyOp(selectedNodeIds, kbGhostNames, (s) => getDirectNeighbors(adj, s, 'both'), additive);
+            } else if (e.key === 'a' || e.key === 'A') {
+              newIds = applyOp(selectedNodeIds, kbGhostNames, (s) => getAncestors(adj, s), additive);
+            } else {
+              newIds = applyOp(selectedNodeIds, kbGhostNames, (s) => getDescendants(adj, s), additive);
+            }
+            setSelection(newIds, []);
+            return;
+          }
+        }
+      }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeEntity, clearActiveEntity, fitView, isReadOnly, storeNodes, setSelection]);
+  }, [activeEntity, clearActiveEntity, fitView, isReadOnly, storeNodes, setSelection, selectedNodeIds, activeSchemaId, activeProject, deleteLabelFromCanvas]);
 
-  // Focus mode dimming
+  // Memoized adjacency map: nodeId → Set of connected edge IDs (for O(1) highlight lookup)
+  const edgeNeighborMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const edge of storeEdges) {
+      if (!map.has(edge.source)) map.set(edge.source, new Set());
+      if (!map.has(edge.target)) map.set(edge.target, new Set());
+      map.get(edge.source)!.add(edge.id);
+      map.get(edge.target)!.add(edge.id);
+    }
+    return map;
+  }, [storeEdges]);
+
+  // B3: schema adjacency and hop-distance dimming
+  const ghostEntityNames = useMemo(
+    () => new Set(ghostEntities.map((e) => e.name)),
+    [ghostEntities]
+  );
+  const schemaAdj = useMemo(() => {
+    if (!hopDimmingEnabled || !activeSchemaFile) return null;
+    return buildAdjacency(activeSchemaFile.schema, ghostEntityNames);
+  }, [hopDimmingEnabled, activeSchemaFile, ghostEntityNames]);
+
+  const hopCloseNodeIds = useMemo<Set<string> | null>(() => {
+    if (!hopDimmingEnabled || !schemaAdj || selectedNodeIds.length === 0) return null;
+    const entityNames = selectedNodeIds.map(nodeIdToEntityName);
+    const seedSet = new Set(entityNames);
+    const nearby = getNHopNeighbors(schemaAdj, seedSet, hopDimmingN, 'both');
+    return new Set([...seedSet, ...nearby]);
+  }, [hopDimmingEnabled, schemaAdj, selectedNodeIds, hopDimmingN]);
+
+  // Active view member set — node IDs from the view that belong to the current active schema
+  const activeViewMemberIds = useMemo<Set<string> | null>(() => {
+    if (!activeViewId) return null;
+    const view = views.find((v) => v.id === activeViewId);
+    if (!view || !activeSchemaFile) return null;
+    const schemaFilePath = activeSchemaFile.filePath;
+    const ids = new Set<string>();
+    for (const m of view.members) {
+      if (m.schemaFilePath === schemaFilePath) ids.add(m.name);
+    }
+    return ids;
+  }, [activeViewId, views, activeSchemaFile]);
+
+  // Focus mode dimming (ephemeral — separate from persistent views)
   const visibleNodeIds = useMemo<Set<string> | null>(() => {
     if (!focusMode) return null;
     if (focusMode.type === 'selection') return new Set(focusMode.nodeIds);
@@ -665,14 +927,73 @@ function SchemaCanvasInner() {
   }, [focusMode, activeSchemaFile]);
 
   const displayNodes: Node[] = useMemo(() => {
-    if (!visibleNodeIds) return storeNodes;
-    return storeNodes.map((n) => ({
-      ...n,
-      style: visibleNodeIds.has(n.id)
-        ? n.style
-        : { ...n.style, opacity: 0.3, pointerEvents: 'none' as const },
-    }));
-  }, [storeNodes, visibleNodeIds]);
+    // Active view: hard-filter to only members (completely remove non-members)
+    if (activeViewMemberIds) {
+      return storeNodes.filter((n) => activeViewMemberIds.has(n.id));
+    }
+    // Focus mode: dim non-members (soft filter)
+    if (visibleNodeIds) {
+      return storeNodes.map((n) => ({
+        ...n,
+        style: visibleNodeIds.has(n.id)
+          ? n.style
+          : { ...n.style, opacity: 0.3, pointerEvents: 'none' as const },
+      }));
+    }
+    // B3: hop-distance dimming — dim nodes beyond N hops from selection
+    if (hopCloseNodeIds) {
+      return storeNodes.map((n) => ({
+        ...n,
+        style: hopCloseNodeIds.has(n.id)
+          ? n.style
+          : { ...n.style, opacity: 0.2, filter: 'grayscale(1)', transition: 'opacity 0.15s, filter 0.15s' },
+      }));
+    }
+    return storeNodes;
+  }, [storeNodes, activeViewMemberIds, visibleNodeIds, hopCloseNodeIds]);
+
+  const displayEdges = useMemo(() => {
+    // Active view: only show edges where both endpoints are members.
+    // Hidden edge types are already excluded from storeEdges by deriveGraph.
+    if (activeViewMemberIds) {
+      return storeEdges.filter(
+        (e) => activeViewMemberIds.has(e.source) && activeViewMemberIds.has(e.target)
+      );
+    }
+    const filtered = storeEdges;
+
+    // B3: hop-distance dimming — dim edges where neither endpoint is within N hops
+    if (hopCloseNodeIds) {
+      return filtered.map((edge) => {
+        const isDimmed = !hopCloseNodeIds.has(edge.source) && !hopCloseNodeIds.has(edge.target);
+        return {
+          ...edge,
+          style: { ...edge.style, opacity: isDimmed ? 0.1 : 1, filter: isDimmed ? 'grayscale(1)' : undefined, transition: 'opacity 0.15s, filter 0.15s' },
+          data: { ...edge.data, dimmed: isDimmed },
+        };
+      });
+    }
+
+    // Selection (sticky) takes priority over hover
+    let focusNodeId: string | null = null;
+    if (highlightOnSelection && highlightPinnedNodeId) {
+      focusNodeId = highlightPinnedNodeId;
+    } else if (highlightOnHover && hoveredNodeId) {
+      focusNodeId = hoveredNodeId;
+    }
+
+    if (!focusNodeId) return filtered;
+
+    const neighborEdges = edgeNeighborMap.get(focusNodeId) ?? new Set<string>();
+    return filtered.map((edge) => {
+      const isDimmed = !neighborEdges.has(edge.id);
+      return {
+        ...edge,
+        style: { ...edge.style, opacity: isDimmed ? 0.15 : 1, transition: 'opacity 0.15s' },
+        data: { ...edge.data, dimmed: isDimmed },
+      };
+    });
+  }, [storeEdges, hiddenEdgeTypes, activeViewMemberIds, highlightOnHover, highlightOnSelection, hoveredNodeId, highlightPinnedNodeId, edgeNeighborMap, hopCloseNodeIds]);
 
   // Empty state
   if (!activeSchemaFile) {
@@ -691,7 +1012,7 @@ function SchemaCanvasInner() {
       <EdgeMarkerDefs />
       <ReactFlow
         nodes={displayNodes}
-        edges={storeEdges}
+        edges={displayEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes as unknown as EdgeTypes}
         onNodesChange={onNodesChange}
@@ -699,6 +1020,8 @@ function SchemaCanvasInner() {
         onMoveEnd={onMoveEnd}
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeClick={onNodeClick}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
         onConnect={onConnect}
@@ -716,6 +1039,7 @@ function SchemaCanvasInner() {
         connectOnClick={false}
       >
         <Background color="#334155" gap={20} size={1} />
+        {groupByImportSource && <ImportSourceOverlay />}
         <Controls />
         <MiniMap
           nodeColor={(n) => {
@@ -782,6 +1106,24 @@ function SchemaCanvasInner() {
         </div>
       )}
 
+      {/* Active view banner */}
+      {activeViewId && (() => {
+        const view = views.find((v) => v.id === activeViewId);
+        if (!view) return null;
+        const memberCount = activeViewMemberIds?.size ?? 0;
+        return (
+          <div style={styles.viewBanner}>
+            <span>View: <strong>{view.name}</strong> · {memberCount} member{memberCount !== 1 ? 's' : ''}</span>
+            <button
+              style={styles.focusExitBtn}
+              onClick={() => { useAppStore.getState().setActiveViewId(null); scheduleManifestWrite(); }}
+            >
+              Exit view
+            </button>
+          </div>
+        );
+      })()}
+
       {/* Context menu */}
       {contextMenu && (
         <CanvasContextMenu
@@ -789,7 +1131,26 @@ function SchemaCanvasInner() {
           onClose={() => setContextMenu(null)}
           onAddClass={handleAddClass}
           onAddEnum={handleAddEnum}
+          onAddLabel={handleAddLabel}
           onDeleteNode={handleDeleteNode}
+          subsets={activeSubsets}
+          entitySubsets={(() => {
+            if (!contextMenu.nodeId || !activeSchemaFile) return [];
+            const schema = activeSchemaFile.schema;
+            if (contextMenu.nodeType === 'classNode') return schema.classes[contextMenu.nodeId]?.subsetOf ?? [];
+            if (contextMenu.nodeType === 'enumNode') return schema.enums[contextMenu.nodeId]?.subsetOf ?? [];
+            return [];
+          })()}
+          onAddToSubset={(nodeId, subsetName) => {
+            if (!activeSchemaId) return;
+            const kind = contextMenu?.nodeType === 'enumNode' ? 'enum' : 'class';
+            addEntityToSubset(activeSchemaId, nodeId, subsetName, kind);
+          }}
+          onRemoveFromSubset={(nodeId, subsetName) => {
+            if (!activeSchemaId) return;
+            const kind = contextMenu?.nodeType === 'enumNode' ? 'enum' : 'class';
+            removeEntityFromSubset(activeSchemaId, nodeId, subsetName, kind);
+          }}
         />
       )}
 
@@ -866,6 +1227,13 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
   },
+  toolbarSep: {
+    width: 1,
+    height: 24,
+    background: 'var(--color-border-default)',
+    alignSelf: 'center',
+    flexShrink: 0,
+  },
   readOnlyBanner: {
     position: 'absolute',
     top: 12,
@@ -894,6 +1262,24 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     fontFamily: 'var(--font-family-mono)',
     color: 'var(--color-state-info-fg)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    zIndex: 10,
+    boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+  },
+  viewBanner: {
+    position: 'absolute',
+    top: 12,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    background: 'var(--color-bg-surface)',
+    border: '1px solid var(--color-border-strong)',
+    borderRadius: 6,
+    padding: '6px 14px',
+    fontSize: 12,
+    fontFamily: 'var(--font-family-mono)',
+    color: 'var(--color-fg-primary)',
     display: 'flex',
     alignItems: 'center',
     gap: 10,

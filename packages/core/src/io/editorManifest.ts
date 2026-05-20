@@ -15,6 +15,13 @@
  *         nodes:
  *           MyClass: { x: 120, y: 80 }
  *         viewport: { x: 0, y: 0, zoom: 1 }
+ *   views:
+ *     - id: abc123
+ *       name: My View
+ *       members:
+ *         - { schemaFilePath: my-schema.yaml, name: MyClass, kind: class }
+ *       renderMode: canvas
+ *   activeViewId: abc123
  */
 
 import * as jsyaml from 'js-yaml';
@@ -23,11 +30,48 @@ import type { Project, CanvasLayout, SchemaFile } from '../model/index.js';
 
 export const MANIFEST_FILENAME = '.linkml-editor.yaml';
 
+// ── View types ────────────────────────────────────────────────────────────────
+
+export interface EdgeFilterSet {
+  hiddenTypes?: string[];
+  /** Per-view range-edge rendering mode override (B1). When absent, falls back to global setting. */
+  rangeEdges?: 'show' | 'inline' | 'auto';
+}
+
+export interface ViewLayout {
+  nodes: Record<string, { x: number; y: number; collapsed?: boolean }>;
+  viewport?: { x: number; y: number; zoom: number };
+  labels?: Array<{ id: string; text: string; x: number; y: number; fontSize: number; locked: boolean }>;
+}
+
+/**
+ * A qualified entity reference within a view.
+ * Uses schemaFilePath (relative to project root) rather than runtime UUID
+ * so membership survives project close/reopen.
+ */
+export interface ViewMember {
+  schemaFilePath: string;
+  name: string;
+  kind: 'class' | 'enum';
+}
+
+export interface ViewDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  members: ViewMember[];
+  renderMode: 'canvas' | 'outline' | 'table';
+  layout?: ViewLayout;
+  edgeFilters?: EdgeFilterSet;
+}
+
 // ── File format types ─────────────────────────────────────────────────────────
 
 export interface EditorManifestData {
   version: 1;
   schemas?: Record<string, SchemaManifestEntry>;
+  views?: ViewDefinition[];
+  activeViewId?: string;
 }
 
 export interface SchemaManifestEntry {
@@ -36,6 +80,7 @@ export interface SchemaManifestEntry {
   layout?: {
     nodes: Record<string, { x: number; y: number; collapsed?: boolean }>;
     viewport?: { x: number; y: number; zoom: number };
+    labels?: Array<{ id: string; text: string; x: number; y: number; fontSize: number; locked: boolean }>;
   };
 }
 
@@ -94,7 +139,9 @@ export function buildManifestData(
   project: Project,
   activeSchemaId: string | null,
   activeLayout: CanvasLayout | null,
-  hiddenSchemaIds: Set<string>
+  hiddenSchemaIds: Set<string>,
+  views: ViewDefinition[] = [],
+  activeViewId: string | null = null
 ): EditorManifestData {
   const schemas: Record<string, SchemaManifestEntry> = {};
 
@@ -102,7 +149,7 @@ export function buildManifestData(
     const layout: CanvasLayout =
       sf.id === activeSchemaId && activeLayout ? activeLayout : sf.canvasLayout;
     const visible = !hiddenSchemaIds.has(sf.id);
-    const hasLayout = Object.keys(layout.nodes).length > 0;
+    const hasLayout = Object.keys(layout.nodes).length > 0 || (layout.labels?.length ?? 0) > 0;
 
     if (hasLayout || !visible) {
       const entry: SchemaManifestEntry = {};
@@ -113,6 +160,7 @@ export function buildManifestData(
           ...(layout.viewport.zoom !== 1 || layout.viewport.x !== 0 || layout.viewport.y !== 0
             ? { viewport: layout.viewport }
             : {}),
+          ...(layout.labels?.length ? { labels: layout.labels } : {}),
         };
       }
       schemas[sf.filePath] = entry;
@@ -122,18 +170,53 @@ export function buildManifestData(
   return {
     version: 1,
     ...(Object.keys(schemas).length > 0 ? { schemas } : {}),
+    ...(views.length > 0 ? { views } : {}),
+    ...(activeViewId ? { activeViewId } : {}),
   };
+}
+
+/**
+ * Migrates a node-position map from the old ghost__/importGroup__ key format
+ * to the new flat format (bare entity names).
+ *
+ * Rules (idempotent):
+ *   - `ghost__<name>` → `<name>` (existing `<name>` entry wins on collision)
+ *   - `importGroup__*` → dropped (compound group nodes no longer exist)
+ */
+function migrateNodeKeys(
+  nodes: Record<string, { x: number; y: number; collapsed?: boolean }>
+): Record<string, { x: number; y: number; collapsed?: boolean }> {
+  const result: Record<string, { x: number; y: number; collapsed?: boolean }> = {};
+
+  // First pass: copy non-ghost, non-importGroup entries
+  for (const [key, value] of Object.entries(nodes)) {
+    if (!key.startsWith('ghost__') && !key.startsWith('importGroup__')) {
+      result[key] = value;
+    }
+  }
+
+  // Second pass: promote ghost__ entries (existing plain-name entries win)
+  for (const [key, value] of Object.entries(nodes)) {
+    if (key.startsWith('ghost__')) {
+      const name = key.slice('ghost__'.length);
+      if (!(name in result)) {
+        result[name] = value;
+      }
+    }
+  }
+
+  return result;
 }
 
 /**
  * Applies manifest data to a list of schema files, updating `canvasLayout` in
  * place (returns new SchemaFile objects — does not mutate). Also returns the
- * set of schema IDs that should be hidden.
+ * set of schema IDs that should be hidden, plus any persisted views.
  */
 export function applyManifestToSchemas(
   schemas: SchemaFile[],
   manifest: EditorManifestData
-): { schemas: SchemaFile[]; hiddenSchemaIds: Set<string> } {
+): { schemas: SchemaFile[]; hiddenSchemaIds: Set<string>; views: ViewDefinition[]; activeViewId: string | null } {
   const hiddenSchemaIds = new Set<string>();
   const manifestSchemas = manifest.schemas ?? {};
 
@@ -145,13 +228,21 @@ export function applyManifestToSchemas(
 
     if (!entry.layout) return sf;
 
+    const migratedNodes = migrateNodeKeys(entry.layout.nodes ?? {});
+
     const canvasLayout: CanvasLayout = {
-      nodes: entry.layout.nodes ?? {},
+      nodes: migratedNodes,
       viewport: entry.layout.viewport ?? { x: 0, y: 0, zoom: 1 },
+      ...(entry.layout.labels?.length ? { labels: entry.layout.labels } : {}),
     };
 
     return { ...sf, canvasLayout };
   });
 
-  return { schemas: updatedSchemas, hiddenSchemaIds };
+  return {
+    schemas: updatedSchemas,
+    hiddenSchemaIds,
+    views: manifest.views ?? [],
+    activeViewId: manifest.activeViewId ?? null,
+  };
 }

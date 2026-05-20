@@ -44,14 +44,19 @@ import {
   PropertiesPanel,
   SchemaSettingsDialog,
   ProjectPanel,
+  DisplayPanel,
   ValidationPanel,
   FocusModeToolbar,
   MenuBar,
   SplashPage,
   SchemaCanvas,
+  OutlineView,
+  TableView,
   CloneDialog,
+  OpenSchemaFromUrlDialog,
   ImportSchemaDialog,
   NewSchemaDialog,
+  CommandPalette,
   createNewProject,
   loadDemoSchemaFromUrl,
   openProjectFromDirectory,
@@ -308,7 +313,22 @@ function App() {
   const setNewSchemaDialogOpen = useAppStore((s) => s.setNewSchemaDialogOpen);
   const switchProjectDialogOpen = useAppStore((s) => s.switchProjectDialogOpen);
   const setSwitchProjectDialogOpen = useAppStore((s) => s.setSwitchProjectDialogOpen);
+  const openFromUrlDialogOpen = useAppStore((s) => s.openFromUrlDialogOpen);
+  const setOpenFromUrlDialogOpen = useAppStore((s) => s.setOpenFromUrlDialogOpen);
   const syncStatus = useAppStore((s) => s.syncStatus);
+  const globalRenderMode = useAppStore((s) => s.globalRenderMode);
+  const tableModeEnabled = useAppStore((s) => s.tableModeEnabled);
+  const views = useAppStore((s) => s.views);
+  const activeViewId = useAppStore((s) => s.activeViewId);
+
+  // Compute effective render mode: active view overrides global default; fall back
+  // to canvas when 'table' is requested but the feature flag is off.
+  const activeRenderMode = React.useMemo(() => {
+    const activeView = views.find((v) => v.id === activeViewId);
+    const raw = activeView ? activeView.renderMode : globalRenderMode;
+    if (raw === 'table' && !tableModeEnabled) return 'canvas' as const;
+    return raw;
+  }, [views, activeViewId, globalRenderMode, tableModeEnabled]);
 
   // Enable "Switch Project" when 2+ projects are registered
   const [registeredProjectCount, setRegisteredProjectCount] = React.useState(() =>
@@ -413,6 +433,8 @@ function App() {
       if (!window.confirm('You have unsaved changes. Close project without saving?')) return;
     }
     closeProject();
+    useAppStore.getState().setViews([]);
+    useAppStore.getState().setActiveViewId(null);
     useAppStore.getState().setGitAvailable(false);
   }, [isDirty, closeProject]);
 
@@ -434,6 +456,19 @@ function App() {
     return () => window.removeEventListener('keydown', handleSaveShortcut);
   }, [saveProject]);
 
+  // ── Cmd+K / Ctrl+K — command palette ──────────────────────────────────────
+  React.useEffect(() => {
+    function handlePaletteShortcut(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        const s = useAppStore.getState();
+        s.setCommandPaletteOpen(!s.commandPaletteOpen);
+      }
+    }
+    window.addEventListener('keydown', handlePaletteShortcut);
+    return () => window.removeEventListener('keydown', handlePaletteShortcut);
+  }, []);
+
   // Show splash page when no project is loaded
   if (!activeProject) {
     return (
@@ -446,6 +481,9 @@ function App() {
         <SignInPrompt />
         {cloneDialogOpen && (
           <CloneDialog onClose={() => setCloneDialogOpen(false)} />
+        )}
+        {openFromUrlDialogOpen && (
+          <OpenSchemaFromUrlDialog onClose={() => setOpenFromUrlDialogOpen(false)} />
         )}
         <ToastList />
       </div>
@@ -469,7 +507,7 @@ function App() {
             onOpenProject={handleOpenProject}
             onSave={saveProject}
             onSaveAs={saveProject}
-            onOpenFromUrl={() => setCloneDialogOpen(true)}
+            onOpenFromUrl={() => setOpenFromUrlDialogOpen(true)}
             onSwitchProject={registeredProjectCount >= 2 ? () => setSwitchProjectDialogOpen(true) : undefined}
             onNewSchema={() => setNewSchemaDialogOpen(true)}
             onImportSchema={() => setImportDialogOpen(true)}
@@ -494,11 +532,18 @@ function App() {
         {/* Project panel (left) */}
         <ProjectPanel />
 
+        {/* Display controls panel */}
+        <DisplayPanel />
+
         {/* Canvas + focus toolbar (center) */}
         <div style={styles.canvasColumn}>
           <FocusModeToolbar />
           <div id="lme-canvas-area" style={styles.canvasArea}>
-            <SchemaCanvas />
+            {activeRenderMode === 'outline'
+              ? <OutlineView />
+              : activeRenderMode === 'table'
+              ? <TableView />
+              : <SchemaCanvas />}
           </div>
         </div>
 
@@ -552,9 +597,14 @@ function App() {
         <SchemaSettingsDialog onClose={() => setSchemaSettingsOpen(false)} />
       )}
 
-      {/* Clone from URL dialog */}
+      {/* Clone git repository dialog */}
       {cloneDialogOpen && (
         <CloneDialog onClose={() => setCloneDialogOpen(false)} />
+      )}
+
+      {/* Open schema from URL dialog */}
+      {openFromUrlDialogOpen && (
+        <OpenSchemaFromUrlDialog onClose={() => setOpenFromUrlDialogOpen(false)} />
       )}
 
       {/* Import schema dialog */}
@@ -571,6 +621,9 @@ function App() {
       {switchProjectDialogOpen && (
         <ProjectSwitcherDialog onClose={() => setSwitchProjectDialogOpen(false)} />
       )}
+
+      {/* Command palette (Cmd-K / Ctrl-K) — portal, renders even when closed */}
+      <CommandPalette />
 
       {/* Toast notifications */}
       <ToastList />
@@ -697,10 +750,12 @@ async function bootstrap() {
       },
       /** Scan an OPFS directory for LinkML schemas and open as project. */
       async openProjectFromPath(dirPath: string) {
-        const { project, hiddenSchemaIds } = await openProjectFromDirectory(dirPath, platformRef.current);
+        const { project, hiddenSchemaIds, views, activeViewId } = await openProjectFromDirectory(dirPath, platformRef.current);
         if (project.schemas.length > 0) {
           useAppStore.getState().setProject(project);
           useAppStore.getState().setHiddenSchemaIds(hiddenSchemaIds);
+          useAppStore.getState().setViews(views);
+          useAppStore.getState().setActiveViewId(activeViewId);
         }
       },
       /** Set the active project's rootPath so Ctrl+S writes to OPFS directly. */
@@ -738,6 +793,8 @@ async function bootstrap() {
       /** Close the active project (returns to splash). */
       closeProject() {
         useAppStore.getState().closeProject();
+        useAppStore.getState().setViews([]);
+        useAppStore.getState().setActiveViewId(null);
       },
     };
 
