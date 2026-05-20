@@ -221,4 +221,27 @@ describe('projectSlice — subset mutations (A4)', () => {
     store.getState().updateSubset(schemaId, 'Alpha', { description: 'Updated desc' });
     expect(getSchema().subsets['Alpha'].description).toBe('Updated desc');
   });
+
+  // ── isReadOnly default (SubsetMembershipEditor convention) ──────────────────
+
+  it('schema without explicit isReadOnly is writable (undefined ?? false)', () => {
+    const sf = store.getState().activeProject!.schemas.find((s) => s.id === schemaId)!;
+    // isReadOnly is not set on schemas built by projectLoader — undefined must be treated as false
+    expect(sf.isReadOnly).toBeUndefined();
+    expect(sf.isReadOnly ?? false).toBe(false);
+  });
+
+  it('schema with isReadOnly: true is read-only', () => {
+    // Simulate an imported (read-only) schema file
+    store.getState().addSchemaFile({
+      id: 'schema-ro',
+      filePath: 'imported.yaml',
+      schema: parseYaml(SCHEMA_YAML),
+      isDirty: false,
+      canvasLayout: emptyCanvasLayout(),
+      isReadOnly: true,
+    });
+    const sf = store.getState().activeProject!.schemas.find((s) => s.id === 'schema-ro')!;
+    expect(sf.isReadOnly ?? false).toBe(true);
+  });
 });

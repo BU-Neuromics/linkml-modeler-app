@@ -24,7 +24,7 @@ export function SubsetMembershipEditor({ schemaId, entityName, kind }: Props) {
   const removeEntityFromSubset = useAppStore((s) => s.removeEntityFromSubset);
 
   const schema = activeSchemaFile?.schema;
-  const isReadOnly = activeSchemaFile?.isReadOnly ?? true;
+  const isReadOnly = activeSchemaFile?.isReadOnly ?? false;
 
   const subsetNames = useMemo(
     () => (schema ? Object.keys(schema.subsets) : []),
