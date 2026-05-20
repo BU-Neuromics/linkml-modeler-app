@@ -14,6 +14,7 @@ export interface Toast {
 const HIDDEN_EDGE_TYPES_KEY = 'linkml-editor-hidden-edge-types';
 const HIGHLIGHT_SETTINGS_KEY = 'linkml-editor-highlight-settings';
 const GROUP_BY_IMPORT_SOURCE_KEY = 'linkml-editor-group-by-import-source';
+const HOP_DIMMING_KEY = 'linkml-editor-hop-dimming';
 
 function loadGroupByImportSource(): boolean {
   try {
@@ -21,6 +22,20 @@ function loadGroupByImportSource(): boolean {
     if (raw !== null) return raw === 'true';
   } catch { /* ignore */ }
   return false;
+}
+
+function loadHopDimming(): { enabled: boolean; n: number } {
+  try {
+    const raw = localStorage.getItem(HOP_DIMMING_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        enabled: parsed.enabled ?? false,
+        n: typeof parsed.n === 'number' ? Math.max(1, Math.min(9, parsed.n)) : 2,
+      };
+    }
+  } catch { /* ignore */ }
+  return { enabled: false, n: 2 };
 }
 
 function loadHiddenEdgeTypes(): Set<string> {
@@ -72,6 +87,10 @@ export interface UISlice {
   globalRenderMode: 'canvas' | 'outline';
   /** When true, draws swimlane background regions grouping nodes by their import source file */
   groupByImportSource: boolean;
+  /** Whether hop-distance dimming is active (B3). Off by default. */
+  hopDimmingEnabled: boolean;
+  /** Number of hops within which nodes/edges are kept at full opacity (B3). */
+  hopDimmingN: number;
 
   // Actions
   setTheme(theme: Theme): void;
@@ -90,6 +109,8 @@ export interface UISlice {
   setHighlightOnSelection(value: boolean): void;
   setGlobalRenderMode(mode: 'canvas' | 'outline'): void;
   setGroupByImportSource(value: boolean): void;
+  setHopDimmingEnabled(value: boolean): void;
+  setHopDimmingN(n: number): void;
 }
 
 let toastCounter = 0;
@@ -107,6 +128,8 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   highlightOnSelection: loadHighlightSettings().onSelection,
   globalRenderMode: 'canvas',
   groupByImportSource: loadGroupByImportSource(),
+  hopDimmingEnabled: loadHopDimming().enabled,
+  hopDimmingN: loadHopDimming().n,
 
   setTheme(theme) {
     set({ theme });
@@ -181,5 +204,20 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   setGroupByImportSource(value) {
     try { localStorage.setItem(GROUP_BY_IMPORT_SOURCE_KEY, String(value)); } catch { /* ignore */ }
     set({ groupByImportSource: value });
+  },
+
+  setHopDimmingEnabled(value) {
+    set((state) => {
+      try { localStorage.setItem(HOP_DIMMING_KEY, JSON.stringify({ enabled: value, n: state.hopDimmingN })); } catch { /* ignore */ }
+      return { hopDimmingEnabled: value };
+    });
+  },
+
+  setHopDimmingN(n) {
+    const clamped = Math.max(1, Math.min(9, n));
+    set((state) => {
+      try { localStorage.setItem(HOP_DIMMING_KEY, JSON.stringify({ enabled: state.hopDimmingEnabled, n: clamped })); } catch { /* ignore */ }
+      return { hopDimmingN: clamped };
+    });
   },
 });

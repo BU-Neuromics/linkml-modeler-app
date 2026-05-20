@@ -47,6 +47,8 @@ import {
   getAncestors,
   getDescendants,
   getDirectNeighbors,
+  getNHopNeighbors,
+  nodeIdToEntityName,
   applyOp,
 } from './selectionOps.js';
 
@@ -263,6 +265,8 @@ function SchemaCanvasInner() {
   const highlightOnHover = useAppStore((s) => s.highlightOnHover);
   const highlightOnSelection = useAppStore((s) => s.highlightOnSelection);
   const groupByImportSource = useAppStore((s) => s.groupByImportSource);
+  const hopDimmingEnabled = useAppStore((s) => s.hopDimmingEnabled);
+  const hopDimmingN = useAppStore((s) => s.hopDimmingN);
 
   // Schema mutations
   const addClass = useAppStore((s) => s.addClass);
@@ -783,6 +787,24 @@ function SchemaCanvasInner() {
     return map;
   }, [storeEdges]);
 
+  // B3: schema adjacency and hop-distance dimming
+  const ghostEntityNames = useMemo(
+    () => new Set(ghostEntities.map((e) => e.name)),
+    [ghostEntities]
+  );
+  const schemaAdj = useMemo(() => {
+    if (!hopDimmingEnabled || !activeSchemaFile) return null;
+    return buildAdjacency(activeSchemaFile.schema, ghostEntityNames);
+  }, [hopDimmingEnabled, activeSchemaFile, ghostEntityNames]);
+
+  const hopCloseNodeIds = useMemo<Set<string> | null>(() => {
+    if (!hopDimmingEnabled || !schemaAdj || selectedNodeIds.length === 0) return null;
+    const entityNames = selectedNodeIds.map(nodeIdToEntityName);
+    const seedSet = new Set(entityNames);
+    const nearby = getNHopNeighbors(schemaAdj, seedSet, hopDimmingN, 'both');
+    return new Set([...seedSet, ...nearby]);
+  }, [hopDimmingEnabled, schemaAdj, selectedNodeIds, hopDimmingN]);
+
   // Active view member set — node IDs from the view that belong to the current active schema
   const activeViewMemberIds = useMemo<Set<string> | null>(() => {
     if (!activeViewId) return null;
@@ -816,14 +838,25 @@ function SchemaCanvasInner() {
       return storeNodes.filter((n) => activeViewMemberIds.has(n.id));
     }
     // Focus mode: dim non-members (soft filter)
-    if (!visibleNodeIds) return storeNodes;
-    return storeNodes.map((n) => ({
-      ...n,
-      style: visibleNodeIds.has(n.id)
-        ? n.style
-        : { ...n.style, opacity: 0.3, pointerEvents: 'none' as const },
-    }));
-  }, [storeNodes, activeViewMemberIds, visibleNodeIds]);
+    if (visibleNodeIds) {
+      return storeNodes.map((n) => ({
+        ...n,
+        style: visibleNodeIds.has(n.id)
+          ? n.style
+          : { ...n.style, opacity: 0.3, pointerEvents: 'none' as const },
+      }));
+    }
+    // B3: hop-distance dimming — dim nodes beyond N hops from selection
+    if (hopCloseNodeIds) {
+      return storeNodes.map((n) => ({
+        ...n,
+        style: hopCloseNodeIds.has(n.id)
+          ? n.style
+          : { ...n.style, opacity: 0.2, filter: 'grayscale(1)', transition: 'opacity 0.15s, filter 0.15s' },
+      }));
+    }
+    return storeNodes;
+  }, [storeNodes, activeViewMemberIds, visibleNodeIds, hopCloseNodeIds]);
 
   const displayEdges = useMemo(() => {
     // Active view: only show edges where both endpoints are members.
@@ -834,6 +867,18 @@ function SchemaCanvasInner() {
       );
     }
     const filtered = storeEdges;
+
+    // B3: hop-distance dimming — dim edges where neither endpoint is within N hops
+    if (hopCloseNodeIds) {
+      return filtered.map((edge) => {
+        const isDimmed = !hopCloseNodeIds.has(edge.source) && !hopCloseNodeIds.has(edge.target);
+        return {
+          ...edge,
+          style: { ...edge.style, opacity: isDimmed ? 0.1 : 1, filter: isDimmed ? 'grayscale(1)' : undefined, transition: 'opacity 0.15s, filter 0.15s' },
+          data: { ...edge.data, dimmed: isDimmed },
+        };
+      });
+    }
 
     // Selection (sticky) takes priority over hover
     let focusNodeId: string | null = null;
@@ -854,7 +899,7 @@ function SchemaCanvasInner() {
         data: { ...edge.data, dimmed: isDimmed },
       };
     });
-  }, [storeEdges, activeViewMemberIds, highlightOnHover, highlightOnSelection, hoveredNodeId, highlightPinnedNodeId, edgeNeighborMap]);
+  }, [storeEdges, hiddenEdgeTypes, activeViewMemberIds, highlightOnHover, highlightOnSelection, hoveredNodeId, highlightPinnedNodeId, edgeNeighborMap, hopCloseNodeIds]);
 
   // Empty state
   if (!activeSchemaFile) {
