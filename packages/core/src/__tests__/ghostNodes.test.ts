@@ -138,4 +138,71 @@ describe('Imported entity pipeline', () => {
     expect(eventNode).toBeDefined();
     expect((eventNode?.data as { imported?: boolean }).imported).toBeUndefined();
   });
+
+  it('deriveGraph imported nodes carry importSourceFile matching entity.sourceFilePath', () => {
+    const baseSchema = {
+      ...emptySchema('base', 'https://example.org/base', 'base'),
+      classes: { Person: emptyClassDefinition('Person') },
+    };
+    const baseFile = makeSchemaFile('b1', 'base.yaml', baseSchema);
+
+    const mainClass = emptyClassDefinition('Event');
+    mainClass.attributes = { participant: { name: 'participant', range: 'Person' } };
+    const mainSchema = {
+      ...emptySchema('main', 'https://example.org/main', 'main'),
+      imports: ['./base'],
+      classes: { Event: mainClass },
+    };
+    const mainFile = makeSchemaFile('m1', 'main.yaml', mainSchema);
+
+    const importedEntities = collectReferencedImportedEntities(mainFile, [mainFile, baseFile]);
+    const { nodes } = deriveGraph(mainSchema, emptyCanvasLayout(), {}, importedEntities);
+
+    const personNode = nodes.find((n) => n.id === 'Person');
+    expect(personNode).toBeDefined();
+    const personData = personNode?.data as { importSourceFile?: string };
+    expect(personData.importSourceFile).toBe('base.yaml');
+
+    // Local Event node must NOT have importSourceFile
+    const eventNode = nodes.find((n) => n.id === 'Event');
+    expect(eventNode).toBeDefined();
+    const eventData = eventNode?.data as { importSourceFile?: string };
+    expect(eventData.importSourceFile).toBeUndefined();
+  });
+
+  it('deriveGraph nodes from two distinct import sources get distinct importSourceFile values', () => {
+    const baseSchema = {
+      ...emptySchema('base', 'https://example.org/base', 'base'),
+      classes: { Person: emptyClassDefinition('Person') },
+    };
+    const baseFile = makeSchemaFile('b1', 'base.yaml', baseSchema);
+
+    const extSchema = {
+      ...emptySchema('ext', 'https://example.org/ext', 'ext'),
+      classes: { Organization: emptyClassDefinition('Organization') },
+    };
+    const extFile = makeSchemaFile('e1', 'ext.yaml', extSchema);
+
+    const mainClass = emptyClassDefinition('Event');
+    mainClass.attributes = {
+      participant: { name: 'participant', range: 'Person' },
+      organizer: { name: 'organizer', range: 'Organization' },
+    };
+    const mainSchema = {
+      ...emptySchema('main', 'https://example.org/main', 'main'),
+      imports: ['./base', './ext'],
+      classes: { Event: mainClass },
+    };
+    const mainFile = makeSchemaFile('m1', 'main.yaml', mainSchema);
+
+    const importedEntities = collectReferencedImportedEntities(mainFile, [mainFile, baseFile, extFile]);
+    const { nodes } = deriveGraph(mainSchema, emptyCanvasLayout(), {}, importedEntities);
+
+    const personData = nodes.find((n) => n.id === 'Person')?.data as { importSourceFile?: string };
+    const orgData = nodes.find((n) => n.id === 'Organization')?.data as { importSourceFile?: string };
+
+    expect(personData.importSourceFile).toBe('base.yaml');
+    expect(orgData.importSourceFile).toBe('ext.yaml');
+    expect(personData.importSourceFile).not.toBe(orgData.importSourceFile);
+  });
 });

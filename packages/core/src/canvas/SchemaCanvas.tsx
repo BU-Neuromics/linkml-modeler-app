@@ -31,6 +31,7 @@ import 'reactflow/dist/style.css';
 import ClassNode from './ClassNode.js';
 import EnumNode from './EnumNode.js';
 import LabelNode from './LabelNode.js';
+import { ImportSourceOverlay } from './ImportSourceOverlay.js';
 import { Diamond, Hexagon, Plus } from '../ui/icons/index.js';
 import { edgeTypes, EdgeMarkerDefs } from './edges.js';
 import { deriveGraph } from './deriveGraph.js';
@@ -261,6 +262,7 @@ function SchemaCanvasInner() {
   const hiddenEdgeTypes = useAppStore((s) => s.hiddenEdgeTypes);
   const highlightOnHover = useAppStore((s) => s.highlightOnHover);
   const highlightOnSelection = useAppStore((s) => s.highlightOnSelection);
+  const groupByImportSource = useAppStore((s) => s.groupByImportSource);
 
   // Schema mutations
   const addClass = useAppStore((s) => s.addClass);
@@ -898,6 +900,7 @@ function SchemaCanvasInner() {
         connectOnClick={false}
       >
         <Background color="#334155" gap={20} size={1} />
+        {groupByImportSource && <ImportSourceOverlay />}
         <Controls />
         <MiniMap
           nodeColor={(n) => {

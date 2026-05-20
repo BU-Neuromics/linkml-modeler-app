@@ -345,6 +345,7 @@ export function deriveGraph(
         classDef: entity.schema.classes[entity.name],
         collapsed: false,
         imported: true,
+        importSourceFile: entity.sourceFilePath,
       };
       nodes.push({
         id: entity.name,
@@ -361,6 +362,7 @@ export function deriveGraph(
         enumDef: entity.schema.enums[entity.name],
         collapsed: false,
         imported: true,
+        importSourceFile: entity.sourceFilePath,
       };
       nodes.push({
         id: entity.name,

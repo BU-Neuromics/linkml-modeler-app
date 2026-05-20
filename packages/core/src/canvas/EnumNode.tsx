@@ -9,6 +9,7 @@ export interface EnumNodeData extends CanvasNodeData {
   enumDef: EnumDefinition;
   collapsed: boolean;
   imported?: boolean; // True for read-only imported enums
+  importSourceFile?: string; // Source file path — set when imported: true
 }
 
 const VALUE_LIMIT = 12;
