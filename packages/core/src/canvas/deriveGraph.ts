@@ -7,6 +7,7 @@
 import type { Node, Edge } from 'reactflow';
 import type { LinkMLSchema, CanvasLayout, SlotDefinition } from '../model/index.js';
 import type { CanvasNodeData } from '../store/slices/canvasSlice.js';
+import type { RangeEdgesMode } from '../store/slices/uiSlice.js';
 import type { ClassNodeData, ResolvedSlot } from './ClassNode.js';
 import type { EnumNodeData } from './EnumNode.js';
 import type { LabelNodeData } from './LabelNode.js';
@@ -137,7 +138,8 @@ export function deriveGraph(
   collapsed: Record<string, boolean> = {},
   importedEntities: ImportedEntity[] = [],
   allSchemaSlots: Record<string, SlotDefinition> = {},
-  hiddenEdgeTypes: ReadonlySet<string> = new Set()
+  hiddenEdgeTypes: ReadonlySet<string> = new Set(),
+  rangeEdgesMode: RangeEdgesMode = 'show'
 ): DerivedGraph {
   const nodes: Node<CanvasNodeData>[] = [];
   const edges: Edge[] = [];
@@ -153,10 +155,12 @@ export function deriveGraph(
     const ownSlotNames = new Set<string>();
 
     for (const slot of Object.values(classDef.attributes)) {
+      const rangeIsEntity = !!slot.range && (slot.range in schema.classes || slot.range in schema.enums);
       resolvedSlots.push({
         slot,
         kind: 'attribute',
         hasUsageOverride: !!classDef.slotUsage[slot.name],
+        rangeIsEntity,
       });
       ownSlotNames.add(slot.name);
     }
@@ -165,14 +169,17 @@ export function deriveGraph(
       if (!schemaSlot) continue;
       const usage = classDef.slotUsage[slotName];
       const effectiveSlot = usage ? { ...schemaSlot, ...usage, name: slotName } : schemaSlot;
-      resolvedSlots.push({ slot: effectiveSlot, kind: 'schema', hasUsageOverride: !!usage });
+      const effectiveRange = effectiveSlot.range;
+      const rangeIsEntity = !!effectiveRange && (effectiveRange in schema.classes || effectiveRange in schema.enums);
+      resolvedSlots.push({ slot: effectiveSlot, kind: 'schema', hasUsageOverride: !!usage, rangeIsEntity });
       ownSlotNames.add(slotName);
     }
 
     // Add inherited slots (from is_a ancestors and mixins) that aren't overridden locally
     for (const [name, resolved] of gatherAncestorSlots(className, schema, allSchemaSlots)) {
       if (!ownSlotNames.has(name)) {
-        resolvedSlots.push(resolved);
+        const rangeIsEntity = !!resolved.slot.range && (resolved.slot.range in schema.classes || resolved.slot.range in schema.enums);
+        resolvedSlots.push({ ...resolved, rangeIsEntity });
       }
     }
 
@@ -184,6 +191,7 @@ export function deriveGraph(
       classDef,
       collapsed: isCollapsed,
       resolvedSlots,
+      rangeEdgesMode,
     };
 
     nodes.push({
@@ -242,8 +250,8 @@ export function deriveGraph(
       }
     }
 
-    // ── range edges (from attributes) ─────────────────────────────────────
-    if (!hiddenEdgeTypes.has('range')) {
+    // ── range edges (from attributes and schema-level slots) ──────────────
+    if (!hiddenEdgeTypes.has('range') && rangeEdgesMode === 'show') {
       for (const [slotName, slot] of Object.entries(classDef.attributes)) {
         if (!slot.range) continue;
         if (slot.range === className) continue; // self-reference: render badge on slot row instead
@@ -273,7 +281,7 @@ export function deriveGraph(
         }
       }
 
-      // ── range edges (from schema-level slot references) ────────────────────
+      // ── range edges (from schema-level slot references) ──────────────────
       for (const slotName of classDef.slots) {
         const schemaSlot = allSchemaSlots[slotName] ?? schema.slots?.[slotName];
         if (!schemaSlot) continue;
@@ -307,7 +315,6 @@ export function deriveGraph(
         }
       }
     }
-  }
 
   // ── Enum nodes ──────────────────────────────────────────────────────────────
   for (const [enumName, enumDef] of Object.entries(schema.enums)) {
@@ -344,13 +351,24 @@ export function deriveGraph(
     const pos = layout.nodes[entity.name] ?? gridPosition(gridIndex++);
 
     if (entity.type === 'class') {
+      const importedClassDef = entity.schema.classes[entity.name];
+      const importedResolvedSlots: ResolvedSlot[] = Object.values(importedClassDef.attributes).map((slot) => ({
+        slot,
+        kind: 'attribute' as const,
+        rangeIsEntity: !!slot.range && (
+          slot.range in schema.classes || slot.range in schema.enums ||
+          slot.range in (entity.schema.classes ?? {}) || slot.range in (entity.schema.enums ?? {})
+        ),
+      }));
       const nodeData: ClassNodeData = {
         entityId: entity.name,
         entityType: 'class',
-        classDef: entity.schema.classes[entity.name],
+        classDef: importedClassDef,
         collapsed: false,
         imported: true,
         importSourceFile: entity.sourceFilePath,
+        resolvedSlots: importedResolvedSlots,
+        rangeEdgesMode,
       };
       nodes.push({
         id: entity.name,
@@ -385,7 +403,7 @@ export function deriveGraph(
     const srcCollapsed = collapsed[className] ?? false;
 
     // Range edges (attributes)
-    if (!hiddenEdgeTypes.has('range')) {
+    if (!hiddenEdgeTypes.has('range') && rangeEdgesMode === 'show') {
       for (const [slotName, slot] of Object.entries(classDef.attributes)) {
         if (!slot.range) continue;
         if (slot.range === className) continue; // self-reference: no edge
