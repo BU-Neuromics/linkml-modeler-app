@@ -315,6 +315,7 @@ export function deriveGraph(
         }
       }
     }
+  }
 
   // ── Enum nodes ──────────────────────────────────────────────────────────────
   for (const [enumName, enumDef] of Object.entries(schema.enums)) {
