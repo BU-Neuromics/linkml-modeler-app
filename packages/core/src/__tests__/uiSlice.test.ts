@@ -49,4 +49,83 @@ describe('UISlice', () => {
     store.getState().setProjectPanelWidth(300);
     expect(store.getState().projectPanelWidth).toBe(300);
   });
+
+  it('setGlobalRangeEdgesMode — cycles through all modes', () => {
+    const store = createStore();
+    store.getState().setGlobalRangeEdgesMode('inline');
+    expect(store.getState().globalRangeEdgesMode).toBe('inline');
+    store.getState().setGlobalRangeEdgesMode('auto');
+    expect(store.getState().globalRangeEdgesMode).toBe('auto');
+    store.getState().setGlobalRangeEdgesMode('show');
+    expect(store.getState().globalRangeEdgesMode).toBe('show');
+  });
+
+  it('setTableModeEnabled — enables and disables table mode', () => {
+    const store = createStore();
+    expect(store.getState().tableModeEnabled).toBe(false);
+    store.getState().setTableModeEnabled(true);
+    expect(store.getState().tableModeEnabled).toBe(true);
+    store.getState().setTableModeEnabled(false);
+    expect(store.getState().tableModeEnabled).toBe(false);
+  });
+
+  it('setGroupByImportSource — toggles import-source grouping', () => {
+    const store = createStore();
+    expect(store.getState().groupByImportSource).toBe(false);
+    store.getState().setGroupByImportSource(true);
+    expect(store.getState().groupByImportSource).toBe(true);
+  });
+
+  it('setHopDimmingEnabled — toggles hop dimming', () => {
+    const store = createStore();
+    expect(store.getState().hopDimmingEnabled).toBe(false);
+    store.getState().setHopDimmingEnabled(true);
+    expect(store.getState().hopDimmingEnabled).toBe(true);
+    store.getState().setHopDimmingEnabled(false);
+    expect(store.getState().hopDimmingEnabled).toBe(false);
+  });
+
+  it('setHopDimmingN — clamps to [1, 9]', () => {
+    const store = createStore();
+    store.getState().setHopDimmingN(3);
+    expect(store.getState().hopDimmingN).toBe(3);
+    store.getState().setHopDimmingN(0);
+    expect(store.getState().hopDimmingN).toBe(1);
+    store.getState().setHopDimmingN(99);
+    expect(store.getState().hopDimmingN).toBe(9);
+  });
+
+  it('setHighlightOnHover / setHighlightOnSelection', () => {
+    const store = createStore();
+    store.getState().setHighlightOnHover(true);
+    expect(store.getState().highlightOnHover).toBe(true);
+    store.getState().setHighlightOnSelection(false);
+    expect(store.getState().highlightOnSelection).toBe(false);
+  });
+
+  it('setSchemaVisible — hides and shows a schema', () => {
+    const store = createStore();
+    store.getState().setSchemaVisible('schema-1', false);
+    expect(store.getState().hiddenSchemaIds.has('schema-1')).toBe(true);
+    store.getState().setSchemaVisible('schema-1', true);
+    expect(store.getState().hiddenSchemaIds.has('schema-1')).toBe(false);
+  });
+
+  it('toggleEdgeTypeVisibility — hides then shows an edge type', () => {
+    const store = createStore();
+    store.getState().toggleEdgeTypeVisibility('is_a');
+    expect(store.getState().hiddenEdgeTypes.has('is_a')).toBe(true);
+    store.getState().toggleEdgeTypeVisibility('is_a');
+    expect(store.getState().hiddenEdgeTypes.has('is_a')).toBe(false);
+  });
+
+  it('setGlobalRenderMode — switches render modes', () => {
+    const store = createStore();
+    store.getState().setGlobalRenderMode('outline');
+    expect(store.getState().globalRenderMode).toBe('outline');
+    store.getState().setGlobalRenderMode('table');
+    expect(store.getState().globalRenderMode).toBe('table');
+    store.getState().setGlobalRenderMode('canvas');
+    expect(store.getState().globalRenderMode).toBe('canvas');
+  });
 });
