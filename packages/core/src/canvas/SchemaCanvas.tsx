@@ -349,8 +349,8 @@ function SchemaCanvasInner() {
   // Derive graph (imported entities rendered as ordinary flat nodes)
   const { nodes: derivedNodes, edges: derivedEdges } = useMemo(() => {
     if (!activeSchemaFile) return { nodes: [], edges: [] };
-    return deriveGraph(activeSchemaFile.schema, { ...localLayout, labels: effectiveLabels }, {}, ghostEntities, allSchemaSlots);
-  }, [activeSchemaFile, ghostEntities, localLayout, effectiveLabels, allSchemaSlots]);
+    return deriveGraph(activeSchemaFile.schema, { ...localLayout, labels: effectiveLabels }, {}, ghostEntities, allSchemaSlots, hiddenEdgeTypes);
+  }, [activeSchemaFile, ghostEntities, localLayout, effectiveLabels, allSchemaSlots, hiddenEdgeTypes]);
 
   useEffect(() => {
     setNodes(derivedNodes);
@@ -365,12 +365,12 @@ function SchemaCanvasInner() {
     if (hasLayoutData) {
       void Promise.resolve(activeSchemaFile.canvasLayout).then(setLocalLayout);
     } else {
-      void runAutoLayout(activeSchemaFile.schema, {}, ghostEntities).then((layout) => {
+      void runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes).then((layout) => {
         setLocalLayout(layout);
         setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 100);
       });
     }
-  }, [activeSchemaFile, ghostEntities, fitView]);
+  }, [activeSchemaFile, ghostEntities, hiddenEdgeTypes, fitView]);
 
   useEffect(() => {
     layoutRanRef.current = false;
@@ -396,7 +396,7 @@ function SchemaCanvasInner() {
     if (!hasUnsaved) return;
 
     // Re-run auto-layout to incorporate the new imported nodes
-    runAutoLayout(activeSchemaFile.schema, {}, ghostEntities).then((layout) => {
+    runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes).then((layout) => {
       // Merge: keep existing user-adjusted positions, add new imported positions
       setLocalLayout((prev) => ({
         nodes: { ...layout.nodes, ...prev.nodes },
@@ -404,7 +404,7 @@ function SchemaCanvasInner() {
       }));
       setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 150);
     });
-  }, [activeSchemaFile, ghostEntities, fitView]);
+  }, [activeSchemaFile, ghostEntities, hiddenEdgeTypes, fitView]);
 
   // Zoom to node when a focus request is pending
   useEffect(() => {
@@ -430,11 +430,11 @@ function SchemaCanvasInner() {
 
   const handleAutoLayout = useCallback(async () => {
     if (!activeSchemaFile) return;
-    const layout = await runAutoLayout(activeSchemaFile.schema, {}, ghostEntities);
+    const layout = await runAutoLayout(activeSchemaFile.schema, {}, ghostEntities, hiddenEdgeTypes);
     setLocalLayout(layout);
     setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 100);
     scheduleManifestWrite();
-  }, [activeSchemaFile, ghostEntities, fitView, scheduleManifestWrite]);
+  }, [activeSchemaFile, ghostEntities, hiddenEdgeTypes, fitView, scheduleManifestWrite]);
 
   // ── ReactFlow event handlers ──────────────────────────────────────────────
 
@@ -826,14 +826,14 @@ function SchemaCanvasInner() {
   }, [storeNodes, activeViewMemberIds, visibleNodeIds]);
 
   const displayEdges = useMemo(() => {
-    // Active view: only show edges where both endpoints are members
+    // Active view: only show edges where both endpoints are members.
+    // Hidden edge types are already excluded from storeEdges by deriveGraph.
     if (activeViewMemberIds) {
       return storeEdges.filter(
-        (e) => (!e.type || !hiddenEdgeTypes.has(e.type)) &&
-          activeViewMemberIds.has(e.source) && activeViewMemberIds.has(e.target)
+        (e) => activeViewMemberIds.has(e.source) && activeViewMemberIds.has(e.target)
       );
     }
-    const filtered = storeEdges.filter((e) => !e.type || !hiddenEdgeTypes.has(e.type));
+    const filtered = storeEdges;
 
     // Selection (sticky) takes priority over hover
     let focusNodeId: string | null = null;
@@ -854,7 +854,7 @@ function SchemaCanvasInner() {
         data: { ...edge.data, dimmed: isDimmed },
       };
     });
-  }, [storeEdges, hiddenEdgeTypes, activeViewMemberIds, highlightOnHover, highlightOnSelection, hoveredNodeId, highlightPinnedNodeId, edgeNeighborMap]);
+  }, [storeEdges, activeViewMemberIds, highlightOnHover, highlightOnSelection, hoveredNodeId, highlightPinnedNodeId, edgeNeighborMap]);
 
   // Empty state
   if (!activeSchemaFile) {
