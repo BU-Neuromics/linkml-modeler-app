@@ -32,9 +32,10 @@ export const MANIFEST_FILENAME = '.linkml-editor.yaml';
 
 // ── View types ────────────────────────────────────────────────────────────────
 
-/** Stub for future B2 edge-type filters. */
 export interface EdgeFilterSet {
   hiddenTypes?: string[];
+  /** Per-view range-edge rendering mode override (B1). When absent, falls back to global setting. */
+  rangeEdges?: 'show' | 'inline' | 'auto';
 }
 
 export interface ViewLayout {
