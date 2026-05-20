@@ -42,7 +42,8 @@ const DEFAULT_OPTIONS: Required<AutoLayoutOptions> = {
 export async function runAutoLayout(
   schema: LinkMLSchema,
   opts: AutoLayoutOptions = {},
-  ghostEntities: ImportedEntity[] = []
+  ghostEntities: ImportedEntity[] = [],
+  hiddenEdgeTypes: ReadonlySet<string> = new Set()
 ): Promise<CanvasLayout> {
   const options = { ...DEFAULT_OPTIONS, ...opts };
 
@@ -91,19 +92,21 @@ export async function runAutoLayout(
   // ── Add edges from class relationships ────────────────────────────────────
   for (const [className, classDef] of Object.entries(schema.classes)) {
     // is_a — feed ELK with parent as source so it lays the parent above the child
-    if (classDef.isA && allIds.has(classDef.isA)) {
+    if (!hiddenEdgeTypes.has('is_a') && classDef.isA && allIds.has(classDef.isA)) {
       addEdge(elkEdges, edgeSeen, `isa__${className}__${classDef.isA}`, classDef.isA, className);
     }
 
     // mixins — same reversal so mixin parents render above children
-    for (const m of classDef.mixins) {
-      if (allIds.has(m)) {
-        addEdge(elkEdges, edgeSeen, `mixin__${className}__${m}`, m, className);
+    if (!hiddenEdgeTypes.has('mixin')) {
+      for (const m of classDef.mixins) {
+        if (allIds.has(m)) {
+          addEdge(elkEdges, edgeSeen, `mixin__${className}__${m}`, m, className);
+        }
       }
     }
 
     // union_of
-    if (classDef.unionOf) {
+    if (!hiddenEdgeTypes.has('union_of') && classDef.unionOf) {
       for (const u of classDef.unionOf) {
         if (allIds.has(u)) {
           addEdge(elkEdges, edgeSeen, `union__${className}__${u}`, className, u);
@@ -112,15 +115,17 @@ export async function runAutoLayout(
     }
 
     // range edges
-    for (const [slotName, slot] of Object.entries(classDef.attributes)) {
-      if (!slot.range || !allIds.has(slot.range)) continue;
-      addEdge(
-        elkEdges,
-        edgeSeen,
-        `range__${className}__${slotName}__${slot.range}`,
-        className,
-        slot.range
-      );
+    if (!hiddenEdgeTypes.has('range')) {
+      for (const [slotName, slot] of Object.entries(classDef.attributes)) {
+        if (!slot.range || !allIds.has(slot.range)) continue;
+        addEdge(
+          elkEdges,
+          edgeSeen,
+          `range__${className}__${slotName}__${slot.range}`,
+          className,
+          slot.range
+        );
+      }
     }
   }
 

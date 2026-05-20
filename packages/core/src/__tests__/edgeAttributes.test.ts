@@ -383,3 +383,93 @@ describe('Self-reference slot handling', () => {
     expect(nodeRangeEdges).toHaveLength(0);
   });
 });
+
+// ── 6. hiddenEdgeTypes filtering ─────────────────────────────────────────────
+describe('deriveGraph hiddenEdgeTypes filtering (B2)', () => {
+  const FILTER_YAML = `
+id: https://example.org/filtertest
+name: filtertest
+prefixes:
+  linkml: https://w3id.org/linkml/
+default_prefix: filtertest
+imports:
+  - linkml:types
+classes:
+  Base:
+    abstract: true
+  Child:
+    is_a: Base
+  Mixin:
+    mixin: true
+  User:
+    is_a: Child
+    mixins:
+      - Mixin
+    attributes:
+      profile:
+        range: Profile
+  Profile:
+    attributes:
+      name:
+        range: string
+  Group:
+    union_of:
+      - User
+      - Profile
+`.trim();
+
+  it('emits all edge types by default (no hiddenEdgeTypes)', () => {
+    const schema = parseYaml(FILTER_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {});
+    const types = new Set(graph.edges.map((e) => e.type));
+    expect(types.has('is_a')).toBe(true);
+    expect(types.has('mixin')).toBe(true);
+    expect(types.has('range')).toBe(true);
+    expect(types.has('union_of')).toBe(true);
+  });
+
+  it('hides is_a edges when is_a is in hiddenEdgeTypes', () => {
+    const schema = parseYaml(FILTER_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(['is_a']));
+    const isaEdges = graph.edges.filter((e) => e.type === 'is_a');
+    expect(isaEdges).toHaveLength(0);
+    expect(graph.edges.some((e) => e.type === 'mixin')).toBe(true);
+    expect(graph.edges.some((e) => e.type === 'range')).toBe(true);
+  });
+
+  it('hides mixin edges when mixin is in hiddenEdgeTypes', () => {
+    const schema = parseYaml(FILTER_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(['mixin']));
+    expect(graph.edges.filter((e) => e.type === 'mixin')).toHaveLength(0);
+    expect(graph.edges.some((e) => e.type === 'is_a')).toBe(true);
+  });
+
+  it('hides range edges when range is in hiddenEdgeTypes', () => {
+    const schema = parseYaml(FILTER_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(['range']));
+    expect(graph.edges.filter((e) => e.type === 'range')).toHaveLength(0);
+    expect(graph.edges.some((e) => e.type === 'is_a')).toBe(true);
+  });
+
+  it('hides union_of edges when union_of is in hiddenEdgeTypes', () => {
+    const schema = parseYaml(FILTER_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(['union_of']));
+    expect(graph.edges.filter((e) => e.type === 'union_of')).toHaveLength(0);
+    expect(graph.edges.some((e) => e.type === 'is_a')).toBe(true);
+  });
+
+  it('hides multiple edge types simultaneously', () => {
+    const schema = parseYaml(FILTER_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(['is_a', 'mixin', 'range']));
+    expect(graph.edges.filter((e) => e.type === 'is_a')).toHaveLength(0);
+    expect(graph.edges.filter((e) => e.type === 'mixin')).toHaveLength(0);
+    expect(graph.edges.filter((e) => e.type === 'range')).toHaveLength(0);
+    expect(graph.edges.some((e) => e.type === 'union_of')).toBe(true);
+  });
+
+  it('emits no edges when all types are hidden', () => {
+    const schema = parseYaml(FILTER_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {}, [], {}, new Set(['is_a', 'mixin', 'range', 'union_of']));
+    expect(graph.edges).toHaveLength(0);
+  });
+});

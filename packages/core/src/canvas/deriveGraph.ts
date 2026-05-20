@@ -136,7 +136,8 @@ export function deriveGraph(
   layout: CanvasLayout,
   collapsed: Record<string, boolean> = {},
   importedEntities: ImportedEntity[] = [],
-  allSchemaSlots: Record<string, SlotDefinition> = {}
+  allSchemaSlots: Record<string, SlotDefinition> = {},
+  hiddenEdgeTypes: ReadonlySet<string> = new Set()
 ): DerivedGraph {
   const nodes: Node<CanvasNodeData>[] = [];
   const edges: Edge[] = [];
@@ -195,7 +196,7 @@ export function deriveGraph(
     });
 
     // ── is_a edge — source=parent so the bottom handle exits toward the child ──
-    if (classDef.isA && schema.classes[classDef.isA]) {
+    if (!hiddenEdgeTypes.has('is_a') && classDef.isA && schema.classes[classDef.isA]) {
       const edgeId = `isa__${className}__${classDef.isA}`;
       edges.push({
         id: edgeId,
@@ -208,22 +209,24 @@ export function deriveGraph(
     }
 
     // ── mixin edges — source=mixin parent for same handle direction ────────
-    for (const mixinName of classDef.mixins) {
-      if (schema.classes[mixinName]) {
-        const edgeId = `mixin__${className}__${mixinName}`;
-        edges.push({
-          id: edgeId,
-          type: 'mixin' as LinkMLEdgeType,
-          source: mixinName,
-          target: className,
-          animated: false,
-          data: elkData(layout, edgeId),
-        });
+    if (!hiddenEdgeTypes.has('mixin')) {
+      for (const mixinName of classDef.mixins) {
+        if (schema.classes[mixinName]) {
+          const edgeId = `mixin__${className}__${mixinName}`;
+          edges.push({
+            id: edgeId,
+            type: 'mixin' as LinkMLEdgeType,
+            source: mixinName,
+            target: className,
+            animated: false,
+            data: elkData(layout, edgeId),
+          });
+        }
       }
     }
 
     // ── union_of edges ─────────────────────────────────────────────────────
-    if (classDef.unionOf) {
+    if (!hiddenEdgeTypes.has('union_of') && classDef.unionOf) {
       for (const memberName of classDef.unionOf) {
         if (schema.classes[memberName]) {
           const edgeId = `union__${className}__${memberName}`;
@@ -240,66 +243,68 @@ export function deriveGraph(
     }
 
     // ── range edges (from attributes) ─────────────────────────────────────
-    for (const [slotName, slot] of Object.entries(classDef.attributes)) {
-      if (!slot.range) continue;
-      if (slot.range === className) continue; // self-reference: render badge on slot row instead
-      const rangeIsClass = slot.range in schema.classes;
-      const rangeIsEnum = slot.range in schema.enums;
-      if (rangeIsClass || rangeIsEnum) {
-        const edgeId = `range__${className}__${slotName}__${slot.range}`;
-        const handles = rangeHandles(layout, className, slot.range, slotName, isCollapsed);
-        edges.push({
-          id: edgeId,
-          type: 'range' as LinkMLEdgeType,
-          source: className,
-          target: slot.range,
-          label: slotName,
-          ...handles,
-          data: {
-            slotName,
-            range: slot.range,
-            required: slot.required ?? false,
-            multivalued: slot.multivalued ?? false,
-            identifier: slot.identifier ?? false,
-            // Range edges use smooth-step routing from slot handles; ELK bend points
-            // (computed for node-center routing) would produce incorrect paths here.
-          },
-          animated: false,
-        });
+    if (!hiddenEdgeTypes.has('range')) {
+      for (const [slotName, slot] of Object.entries(classDef.attributes)) {
+        if (!slot.range) continue;
+        if (slot.range === className) continue; // self-reference: render badge on slot row instead
+        const rangeIsClass = slot.range in schema.classes;
+        const rangeIsEnum = slot.range in schema.enums;
+        if (rangeIsClass || rangeIsEnum) {
+          const edgeId = `range__${className}__${slotName}__${slot.range}`;
+          const handles = rangeHandles(layout, className, slot.range, slotName, isCollapsed);
+          edges.push({
+            id: edgeId,
+            type: 'range' as LinkMLEdgeType,
+            source: className,
+            target: slot.range,
+            label: slotName,
+            ...handles,
+            data: {
+              slotName,
+              range: slot.range,
+              required: slot.required ?? false,
+              multivalued: slot.multivalued ?? false,
+              identifier: slot.identifier ?? false,
+              // Range edges use smooth-step routing from slot handles; ELK bend points
+              // (computed for node-center routing) would produce incorrect paths here.
+            },
+            animated: false,
+          });
+        }
       }
-    }
 
-    // ── range edges (from schema-level slot references) ────────────────────
-    for (const slotName of classDef.slots) {
-      const schemaSlot = allSchemaSlots[slotName] ?? schema.slots?.[slotName];
-      if (!schemaSlot) continue;
-      const usage = classDef.slotUsage[slotName];
-      const effectiveRange = usage?.range ?? schemaSlot.range;
-      if (!effectiveRange) continue;
-      if (effectiveRange === className) continue; // self-reference: render badge on slot row instead
-      const edgeId = `range__${className}__${slotName}__${effectiveRange}`;
-      if (edges.find((e) => e.id === edgeId)) continue; // avoid duplicates with attribute edges
-      const rangeIsClass = effectiveRange in schema.classes;
-      const rangeIsEnum = effectiveRange in schema.enums;
-      if (rangeIsClass || rangeIsEnum) {
-        const effectiveSlot = usage ? { ...schemaSlot, ...usage } : schemaSlot;
-        const handles = rangeHandles(layout, className, effectiveRange, slotName, isCollapsed);
-        edges.push({
-          id: edgeId,
-          type: 'range' as LinkMLEdgeType,
-          source: className,
-          target: effectiveRange,
-          label: slotName,
-          ...handles,
-          data: {
-            slotName,
-            range: effectiveRange,
-            required: effectiveSlot.required ?? false,
-            multivalued: effectiveSlot.multivalued ?? false,
-            identifier: effectiveSlot.identifier ?? false,
-          },
-          animated: false,
-        });
+      // ── range edges (from schema-level slot references) ────────────────────
+      for (const slotName of classDef.slots) {
+        const schemaSlot = allSchemaSlots[slotName] ?? schema.slots?.[slotName];
+        if (!schemaSlot) continue;
+        const usage = classDef.slotUsage[slotName];
+        const effectiveRange = usage?.range ?? schemaSlot.range;
+        if (!effectiveRange) continue;
+        if (effectiveRange === className) continue; // self-reference: render badge on slot row instead
+        const edgeId = `range__${className}__${slotName}__${effectiveRange}`;
+        if (edges.find((e) => e.id === edgeId)) continue; // avoid duplicates with attribute edges
+        const rangeIsClass = effectiveRange in schema.classes;
+        const rangeIsEnum = effectiveRange in schema.enums;
+        if (rangeIsClass || rangeIsEnum) {
+          const effectiveSlot = usage ? { ...schemaSlot, ...usage } : schemaSlot;
+          const handles = rangeHandles(layout, className, effectiveRange, slotName, isCollapsed);
+          edges.push({
+            id: edgeId,
+            type: 'range' as LinkMLEdgeType,
+            source: className,
+            target: effectiveRange,
+            label: slotName,
+            ...handles,
+            data: {
+              slotName,
+              range: effectiveRange,
+              required: effectiveSlot.required ?? false,
+              multivalued: effectiveSlot.multivalued ?? false,
+              identifier: effectiveSlot.identifier ?? false,
+            },
+            animated: false,
+          });
+        }
       }
     }
   }
@@ -378,64 +383,66 @@ export function deriveGraph(
     const srcCollapsed = collapsed[className] ?? false;
 
     // Range edges (attributes)
-    for (const [slotName, slot] of Object.entries(classDef.attributes)) {
-      if (!slot.range) continue;
-      if (slot.range === className) continue; // self-reference: no edge
-      const edgeId = `range__${className}__${slotName}__${slot.range}`;
-      if (allImportedIds.has(slot.range) && !edges.find((e) => e.id === edgeId)) {
-        const handles = rangeHandles(layout, className, slot.range, slotName, srcCollapsed);
-        edges.push({
-          id: edgeId,
-          type: 'range' as LinkMLEdgeType,
-          source: className,
-          target: slot.range,
-          label: slotName,
-          ...handles,
-          data: {
-            slotName,
-            range: slot.range,
-            required: slot.required ?? false,
-            multivalued: slot.multivalued ?? false,
-            identifier: slot.identifier ?? false,
-          },
-          animated: false,
-        });
+    if (!hiddenEdgeTypes.has('range')) {
+      for (const [slotName, slot] of Object.entries(classDef.attributes)) {
+        if (!slot.range) continue;
+        if (slot.range === className) continue; // self-reference: no edge
+        const edgeId = `range__${className}__${slotName}__${slot.range}`;
+        if (allImportedIds.has(slot.range) && !edges.find((e) => e.id === edgeId)) {
+          const handles = rangeHandles(layout, className, slot.range, slotName, srcCollapsed);
+          edges.push({
+            id: edgeId,
+            type: 'range' as LinkMLEdgeType,
+            source: className,
+            target: slot.range,
+            label: slotName,
+            ...handles,
+            data: {
+              slotName,
+              range: slot.range,
+              required: slot.required ?? false,
+              multivalued: slot.multivalued ?? false,
+              identifier: slot.identifier ?? false,
+            },
+            animated: false,
+          });
+        }
       }
-    }
 
-    // Range edges (schema-level slot references to imported nodes)
-    for (const slotName of classDef.slots) {
-      const schemaSlot = allSchemaSlots[slotName] ?? schema.slots?.[slotName];
-      if (!schemaSlot) continue;
-      const usage = classDef.slotUsage[slotName];
-      const effectiveRange = usage?.range ?? schemaSlot.range;
-      if (!effectiveRange) continue;
-      if (effectiveRange === className) continue; // self-reference: no edge
-      const edgeId = `range__${className}__${slotName}__${effectiveRange}`;
-      if (allImportedIds.has(effectiveRange) && !edges.find((e) => e.id === edgeId)) {
-        const effectiveSlot = usage ? { ...schemaSlot, ...usage } : schemaSlot;
-        const handles = rangeHandles(layout, className, effectiveRange, slotName, srcCollapsed);
-        edges.push({
-          id: edgeId,
-          type: 'range' as LinkMLEdgeType,
-          source: className,
-          target: effectiveRange,
-          label: slotName,
-          ...handles,
-          data: {
-            slotName,
-            range: effectiveRange,
-            required: effectiveSlot.required ?? false,
-            multivalued: effectiveSlot.multivalued ?? false,
-            identifier: effectiveSlot.identifier ?? false,
-          },
-          animated: false,
-        });
+      // Range edges (schema-level slot references to imported nodes)
+      for (const slotName of classDef.slots) {
+        const schemaSlot = allSchemaSlots[slotName] ?? schema.slots?.[slotName];
+        if (!schemaSlot) continue;
+        const usage = classDef.slotUsage[slotName];
+        const effectiveRange = usage?.range ?? schemaSlot.range;
+        if (!effectiveRange) continue;
+        if (effectiveRange === className) continue; // self-reference: no edge
+        const edgeId = `range__${className}__${slotName}__${effectiveRange}`;
+        if (allImportedIds.has(effectiveRange) && !edges.find((e) => e.id === edgeId)) {
+          const effectiveSlot = usage ? { ...schemaSlot, ...usage } : schemaSlot;
+          const handles = rangeHandles(layout, className, effectiveRange, slotName, srcCollapsed);
+          edges.push({
+            id: edgeId,
+            type: 'range' as LinkMLEdgeType,
+            source: className,
+            target: effectiveRange,
+            label: slotName,
+            ...handles,
+            data: {
+              slotName,
+              range: effectiveRange,
+              required: effectiveSlot.required ?? false,
+              multivalued: effectiveSlot.multivalued ?? false,
+              identifier: effectiveSlot.identifier ?? false,
+            },
+            animated: false,
+          });
+        }
       }
     }
 
     // is_a edge to imported — source=imported parent so handle direction is consistent
-    if (classDef.isA && allImportedIds.has(classDef.isA)) {
+    if (!hiddenEdgeTypes.has('is_a') && classDef.isA && allImportedIds.has(classDef.isA)) {
       const edgeId = `isa__${className}__${classDef.isA}`;
       edges.push({
         id: edgeId,
@@ -448,22 +455,24 @@ export function deriveGraph(
     }
 
     // mixin edges to imported — same reversal
-    for (const mixinName of classDef.mixins) {
-      if (allImportedIds.has(mixinName)) {
-        const edgeId = `mixin__${className}__${mixinName}`;
-        edges.push({
-          id: edgeId,
-          type: 'mixin' as LinkMLEdgeType,
-          source: mixinName,
-          target: className,
-          animated: false,
-          data: elkData(layout, edgeId),
-        });
+    if (!hiddenEdgeTypes.has('mixin')) {
+      for (const mixinName of classDef.mixins) {
+        if (allImportedIds.has(mixinName)) {
+          const edgeId = `mixin__${className}__${mixinName}`;
+          edges.push({
+            id: edgeId,
+            type: 'mixin' as LinkMLEdgeType,
+            source: mixinName,
+            target: className,
+            animated: false,
+            data: elkData(layout, edgeId),
+          });
+        }
       }
     }
 
     // union_of edges to imported
-    if (classDef.unionOf) {
+    if (!hiddenEdgeTypes.has('union_of') && classDef.unionOf) {
       for (const memberName of classDef.unionOf) {
         if (allImportedIds.has(memberName)) {
           const edgeId = `union__${className}__${memberName}`;
