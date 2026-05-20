@@ -20,6 +20,8 @@
     "test:update-goldens": "UPDATE_GOLDENS=1 vitest run"
   },
   "dependencies": {
+    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.24",
     "driver.js": "^1.4.0",
     "js-yaml": "^4.1.0",
     "lucide-react": "^1.14.0",
