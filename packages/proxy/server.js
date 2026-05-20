@@ -1,7 +1,5 @@
-'use strict';
-const http = require('http');
-// v2.x exports the service function directly (no named createServer export)
-const corsProxy = require('@isomorphic-git/cors-proxy');
+import http from 'http';
+import corsProxy from '@isomorphic-git/cors-proxy';
 
 const PORT = parseInt(process.env.PORT || '9999', 10);
 
