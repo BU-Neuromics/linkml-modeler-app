@@ -59,7 +59,7 @@ export interface ViewDefinition {
   name: string;
   description?: string;
   members: ViewMember[];
-  renderMode: 'canvas' | 'outline';
+  renderMode: 'canvas' | 'outline' | 'table';
   layout?: ViewLayout;
   edgeFilters?: EdgeFilterSet;
 }

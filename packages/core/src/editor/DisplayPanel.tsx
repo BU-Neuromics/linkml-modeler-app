@@ -69,11 +69,18 @@ export function DisplayPanel() {
 
   const [nHop, setNHop] = useState(1);
 
+  const tableModeEnabled = useAppStore((s) => s.tableModeEnabled);
+  const setTableModeEnabled = useAppStore((s) => s.setTableModeEnabled);
+
   // Compute effective render mode: active view wins over global default
   const activeView = views.find((v) => v.id === activeViewId) ?? null;
-  const activeRenderMode: 'canvas' | 'outline' = activeView ? activeView.renderMode : globalRenderMode;
+  const rawRenderMode = activeView ? activeView.renderMode : globalRenderMode;
+  // Fall back to canvas for unknown/unsupported modes (e.g. 'table' when flag is off)
+  const activeRenderMode: 'canvas' | 'outline' | 'table' = (rawRenderMode === 'table' && !tableModeEnabled)
+    ? 'canvas'
+    : (rawRenderMode as 'canvas' | 'outline' | 'table');
 
-  function setRenderMode(mode: 'canvas' | 'outline') {
+  function setRenderMode(mode: 'canvas' | 'outline' | 'table') {
     if (activeView) {
       updateView(activeView.id, { renderMode: mode });
     } else {
@@ -160,6 +167,39 @@ export function DisplayPanel() {
             title="Collapsible outline/tree rendering mode"
           >
             outline
+          </button>
+          {tableModeEnabled && (
+            <button
+              id="lme-display-mode-table"
+              style={{
+                ...styles.toggleBtn,
+                borderColor: activeRenderMode === 'table' ? 'var(--color-accent-hover)' : 'var(--color-border-default)',
+                color: activeRenderMode === 'table' ? 'var(--color-accent-hover)' : 'var(--color-fg-muted)',
+              }}
+              onClick={() => setRenderMode('table')}
+              title="Spreadsheet-style bulk-edit table (C2)"
+            >
+              table
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* C2: Table mode feature flag toggle (dev tool) */}
+      <div style={styles.section}>
+        <div style={styles.sectionHeader}>Developer</div>
+        <div style={styles.sectionBody}>
+          <button
+            id="lme-display-table-mode-flag"
+            style={{
+              ...styles.toggleBtn,
+              borderColor: tableModeEnabled ? 'var(--color-accent-hover)' : 'var(--color-border-default)',
+              color: tableModeEnabled ? 'var(--color-accent-hover)' : 'var(--color-fg-muted)',
+            }}
+            onClick={() => setTableModeEnabled(!tableModeEnabled)}
+            title="Enable the table (spreadsheet) rendering mode (C2 feature flag)"
+          >
+            {tableModeEnabled ? 'table: on' : 'table: off'}
           </button>
         </div>
       </div>

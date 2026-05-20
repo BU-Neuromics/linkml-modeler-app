@@ -15,6 +15,7 @@ const HIDDEN_EDGE_TYPES_KEY = 'linkml-editor-hidden-edge-types';
 const HIGHLIGHT_SETTINGS_KEY = 'linkml-editor-highlight-settings';
 const GROUP_BY_IMPORT_SOURCE_KEY = 'linkml-editor-group-by-import-source';
 const HOP_DIMMING_KEY = 'linkml-editor-hop-dimming';
+const TABLE_MODE_ENABLED_KEY = 'linkml-editor-table-mode-enabled';
 
 function loadGroupByImportSource(): boolean {
   try {
@@ -36,6 +37,14 @@ function loadHopDimming(): { enabled: boolean; n: number } {
     }
   } catch { /* ignore */ }
   return { enabled: false, n: 2 };
+}
+
+function loadTableModeEnabled(): boolean {
+  try {
+    const raw = localStorage.getItem(TABLE_MODE_ENABLED_KEY);
+    if (raw !== null) return JSON.parse(raw) === true;
+  } catch { /* ignore */ }
+  return false;
 }
 
 function loadHiddenEdgeTypes(): Set<string> {
@@ -84,13 +93,15 @@ export interface UISlice {
   /** Whether selecting a node highlights its edges and dims all others (sticky) */
   highlightOnSelection: boolean;
   /** Global rendering mode used when no view is active or the active view has no override */
-  globalRenderMode: 'canvas' | 'outline';
+  globalRenderMode: 'canvas' | 'outline' | 'table';
   /** When true, draws swimlane background regions grouping nodes by their import source file */
   groupByImportSource: boolean;
   /** Whether hop-distance dimming is active (B3). Off by default. */
   hopDimmingEnabled: boolean;
   /** Number of hops within which nodes/edges are kept at full opacity (B3). */
   hopDimmingN: number;
+  /** Feature flag: enables the table rendering mode UI (C2). Off by default; toggle via localStorage. */
+  tableModeEnabled: boolean;
 
   // Actions
   setTheme(theme: Theme): void;
@@ -107,10 +118,11 @@ export interface UISlice {
   toggleEdgeTypeVisibility(type: string): void;
   setHighlightOnHover(value: boolean): void;
   setHighlightOnSelection(value: boolean): void;
-  setGlobalRenderMode(mode: 'canvas' | 'outline'): void;
+  setGlobalRenderMode(mode: 'canvas' | 'outline' | 'table'): void;
   setGroupByImportSource(value: boolean): void;
   setHopDimmingEnabled(value: boolean): void;
   setHopDimmingN(n: number): void;
+  setTableModeEnabled(value: boolean): void;
 }
 
 let toastCounter = 0;
@@ -130,6 +142,7 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   groupByImportSource: loadGroupByImportSource(),
   hopDimmingEnabled: loadHopDimming().enabled,
   hopDimmingN: loadHopDimming().n,
+  tableModeEnabled: loadTableModeEnabled(),
 
   setTheme(theme) {
     set({ theme });
@@ -219,5 +232,10 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
       try { localStorage.setItem(HOP_DIMMING_KEY, JSON.stringify({ enabled: state.hopDimmingEnabled, n: clamped })); } catch { /* ignore */ }
       return { hopDimmingN: clamped };
     });
+  },
+
+  setTableModeEnabled(value) {
+    try { localStorage.setItem(TABLE_MODE_ENABLED_KEY, JSON.stringify(value)); } catch { /* ignore */ }
+    set({ tableModeEnabled: value });
   },
 });

@@ -10,7 +10,7 @@ export interface ViewsSlice {
   setViews(views: ViewDefinition[]): void;
   setActiveViewId(id: string | null): void;
 
-  createView(partial: { name: string; description?: string; members: ViewMember[]; renderMode?: 'canvas' | 'outline' }): ViewDefinition;
+  createView(partial: { name: string; description?: string; members: ViewMember[]; renderMode?: 'canvas' | 'outline' | 'table' }): ViewDefinition;
   updateView(id: string, partial: Partial<Omit<ViewDefinition, 'id'>>): void;
   deleteView(id: string): void;
   duplicateView(id: string): ViewDefinition | null;
@@ -29,7 +29,7 @@ export const createViewsSlice: StateCreator<ViewsSlice, [], [], ViewsSlice> = (s
     set({ activeViewId: id });
   },
 
-  createView({ name, description, members, renderMode = 'canvas' }) {
+  createView({ name, description, members, renderMode = 'canvas' }: { name: string; description?: string; members: ViewMember[]; renderMode?: 'canvas' | 'outline' | 'table' }) {
     const view: ViewDefinition = {
       id: crypto.randomUUID(),
       name,
