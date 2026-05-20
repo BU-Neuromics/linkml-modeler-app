@@ -47,6 +47,8 @@ export function DisplayPanel() {
   const setHighlightOnSelection = useAppStore((s) => s.setHighlightOnSelection);
   const globalRenderMode = useAppStore((s) => s.globalRenderMode);
   const setGlobalRenderMode = useAppStore((s) => s.setGlobalRenderMode);
+  const groupByImportSource = useAppStore((s) => s.groupByImportSource);
+  const setGroupByImportSource = useAppStore((s) => s.setGroupByImportSource);
   const updateView = useAppStore((s) => s.updateView);
 
   // A3: Selection state and schema info
@@ -357,7 +359,24 @@ export function DisplayPanel() {
       {/* B1: Inline range rendering — placeholder */}
       {/* B2: Edge density controls — placeholder */}
       {/* B3: Hop-distance dimming — placeholder */}
-      {/* D1: Clustering — placeholder */}
+
+      {/* D1: Import-source clustering */}
+      <div style={styles.section}>
+        <div style={styles.sectionHeader}>Clustering</div>
+        <div style={styles.sectionBody}>
+          <button
+            id="lme-display-group-by-import-source"
+            onClick={() => setGroupByImportSource(!groupByImportSource)}
+            style={{
+              ...styles.toggleBtn,
+              borderColor: groupByImportSource ? 'var(--color-accent-hover)' : 'var(--color-border-default)',
+              color: groupByImportSource ? 'var(--color-accent-hover)' : 'var(--color-fg-muted)',
+            }}
+          >
+            by import source
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

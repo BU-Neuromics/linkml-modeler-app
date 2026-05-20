@@ -18,6 +18,7 @@ export interface ClassNodeData extends CanvasNodeData {
   classDef: ClassDefinition;
   collapsed: boolean;
   imported?: boolean; // True for read-only imported classes
+  importSourceFile?: string; // Source file path — set when imported: true
   resolvedSlots?: ResolvedSlot[]; // Pre-merged, alphabetically sorted for display
 }
 

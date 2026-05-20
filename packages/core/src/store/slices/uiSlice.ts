@@ -13,6 +13,15 @@ export interface Toast {
 
 const HIDDEN_EDGE_TYPES_KEY = 'linkml-editor-hidden-edge-types';
 const HIGHLIGHT_SETTINGS_KEY = 'linkml-editor-highlight-settings';
+const GROUP_BY_IMPORT_SOURCE_KEY = 'linkml-editor-group-by-import-source';
+
+function loadGroupByImportSource(): boolean {
+  try {
+    const raw = localStorage.getItem(GROUP_BY_IMPORT_SOURCE_KEY);
+    if (raw !== null) return raw === 'true';
+  } catch { /* ignore */ }
+  return false;
+}
 
 function loadHiddenEdgeTypes(): Set<string> {
   try {
@@ -61,6 +70,8 @@ export interface UISlice {
   highlightOnSelection: boolean;
   /** Global rendering mode used when no view is active or the active view has no override */
   globalRenderMode: 'canvas' | 'outline';
+  /** When true, draws swimlane background regions grouping nodes by their import source file */
+  groupByImportSource: boolean;
 
   // Actions
   setTheme(theme: Theme): void;
@@ -78,6 +89,7 @@ export interface UISlice {
   setHighlightOnHover(value: boolean): void;
   setHighlightOnSelection(value: boolean): void;
   setGlobalRenderMode(mode: 'canvas' | 'outline'): void;
+  setGroupByImportSource(value: boolean): void;
 }
 
 let toastCounter = 0;
@@ -94,6 +106,7 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   highlightOnHover: loadHighlightSettings().onHover,
   highlightOnSelection: loadHighlightSettings().onSelection,
   globalRenderMode: 'canvas',
+  groupByImportSource: loadGroupByImportSource(),
 
   setTheme(theme) {
     set({ theme });
@@ -163,5 +176,10 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
 
   setGlobalRenderMode(mode) {
     set({ globalRenderMode: mode });
+  },
+
+  setGroupByImportSource(value) {
+    try { localStorage.setItem(GROUP_BY_IMPORT_SOURCE_KEY, String(value)); } catch { /* ignore */ }
+    set({ groupByImportSource: value });
   },
 });
