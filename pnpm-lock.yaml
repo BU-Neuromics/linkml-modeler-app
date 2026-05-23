@@ -42,8 +42,8 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       wait-on:
-        specifier: ^9.0.5
-        version: 9.0.5
+        specifier: ^9.0.10
+        version: 9.0.10
 
   packages/core:
     dependencies:
@@ -122,7 +122,7 @@ importers:
     devDependencies:
       vitepress:
         specifier: ^1.6.3
-        version: 1.6.4(@algolia/client-search@5.50.0)(@types/node@25.9.0)(@types/react@18.3.28)(axios@1.16.0)(lightningcss@1.32.0)(postcss@8.5.14)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)(typescript@6.0.3)
+        version: 1.6.4(@algolia/client-search@5.50.0)(@types/node@25.9.0)(@types/react@18.3.28)(axios@1.16.1)(lightningcss@1.32.0)(postcss@8.5.14)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)(typescript@6.0.3)
 
   packages/electron:
     dependencies:
@@ -1784,8 +1784,8 @@ packages:
     resolution: {integrity: sha512-wvUjBtSGN7+7SjNpq/9M2Tg350UZD3q62IFZLbRAR1bSMlCo1ZaeW+BJ+D090e4hIIZLBcTDWe4Mh4jvUDajzQ==}
     engines: {node: '>= 0.4'}
 
-  axios@1.16.0:
-    resolution: {integrity: sha512-6hp5CwvTPlN2A31g5dxnwAX0orzM7pmCRDLnZSX772mv8WDqICwFjowHuPs04Mc8deIld1+ejhtaMn5vp6b+1w==}
+  axios@1.16.1:
+    resolution: {integrity: sha512-caYkukvroVPO8KrzuJEb50Hm07KwfBZPEC3VeFHTsqWHvKTsy54hjJz9BS/cdaypROE2rH6xvm9mHX4fgWkr3A==}
 
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
@@ -3886,6 +3886,11 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  semver@7.8.1:
+    resolution: {integrity: sha512-rkVq3IXh+4FDGch+KwzX3aV9W3kO54GyEgpvBzSyctDA6Xtd7RJQV1xmXbeQp5v7+VzLOfVqiutSE6GICgPFvg==}
+    engines: {node: '>=10'}
+    hasBin: true
+
   serialize-error@7.0.1:
     resolution: {integrity: sha512-8I8TjW5KMOKsZQTvoxjuSIa7foAwPWGOts+6o7sgjz41/qMD9VQHEDxi6PBvK2l0MXUmqZyNpUK+T2tQaaElvw==}
     engines: {node: '>=10'}
@@ -4510,8 +4515,8 @@ packages:
     resolution: {integrity: sha512-o8qghlI8NZHU1lLPrpi2+Uq7abh4GGPpYANlalzWxyWteJOCsr/P+oPBA49TOLu5FTZO4d3F9MnWJfiMo4BkmA==}
     engines: {node: '>=18'}
 
-  wait-on@9.0.5:
-    resolution: {integrity: sha512-qgnbHDfDTRIp73ANEJNRW/7kn8CrDUcvZz18xotJQku/P4saTGkbIzvnMZebPmVvVNUiRq1qWAPyqCH+W4H8KA==}
+  wait-on@9.0.10:
+    resolution: {integrity: sha512-rCoJEhvMr0X6alHmwc9abbrA5ZrLZFKpFQVKPNFwl2h7DapXOGdmimIHDtLOWhT4PjhZhxFEtZoQgEXbkDWdZw==}
     engines: {node: '>=20.0.0'}
     hasBin: true
 
@@ -5052,7 +5057,7 @@ snapshots:
       node-gyp: 9.4.1
       ora: 5.4.1
       read-binary-file-arch: 1.0.6
-      semver: 7.8.0
+      semver: 7.8.1
       tar: 6.2.1
       yargs: 17.7.2
     transitivePeerDependencies:
@@ -5357,7 +5362,7 @@ snapshots:
   '@npmcli/fs@2.1.2':
     dependencies:
       '@gar/promisify': 1.1.3
-      semver: 7.8.0
+      semver: 7.8.1
 
   '@npmcli/move-file@2.0.1':
     dependencies:
@@ -6185,13 +6190,13 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@vueuse/integrations@12.8.2(axios@1.16.0)(focus-trap@7.8.0)(typescript@6.0.3)':
+  '@vueuse/integrations@12.8.2(axios@1.16.1)(focus-trap@7.8.0)(typescript@6.0.3)':
     dependencies:
       '@vueuse/core': 12.8.2(typescript@6.0.3)
       '@vueuse/shared': 12.8.2(typescript@6.0.3)
       vue: 3.5.31(typescript@6.0.3)
     optionalDependencies:
-      axios: 1.16.0
+      axios: 1.16.1
       focus-trap: 7.8.0
     transitivePeerDependencies:
       - typescript
@@ -6323,7 +6328,7 @@ snapshots:
       minimatch: 10.2.5
       resedit: 1.7.2
       sanitize-filename: 1.6.4
-      semver: 7.8.0
+      semver: 7.8.1
       tar: 6.2.1
       temp-file: 3.4.0
     transitivePeerDependencies:
@@ -6518,13 +6523,15 @@ snapshots:
     dependencies:
       possible-typed-array-names: 1.1.0
 
-  axios@1.16.0:
+  axios@1.16.1:
     dependencies:
       follow-redirects: 1.16.0
       form-data: 4.0.5
+      https-proxy-agent: 5.0.1
       proxy-from-env: 2.1.0
     transitivePeerDependencies:
       - debug
+      - supports-color
 
   balanced-match@1.0.2: {}
 
@@ -7462,7 +7469,7 @@ snapshots:
       asynckit: 0.4.0
       combined-stream: 1.0.8
       es-set-tostringtag: 2.1.0
-      hasown: 2.0.2
+      hasown: 2.0.3
       mime-types: 2.1.35
 
   fs-constants@1.0.0: {}
@@ -7684,7 +7691,6 @@ snapshots:
   hasown@2.0.3:
     dependencies:
       function-bind: 1.1.2
-    optional: true
 
   hast-util-to-html@9.0.5:
     dependencies:
@@ -8401,7 +8407,7 @@ snapshots:
 
   node-abi@3.92.0:
     dependencies:
-      semver: 7.8.0
+      semver: 7.8.1
 
   node-abi@4.29.0:
     dependencies:
@@ -8444,7 +8450,7 @@ snapshots:
       nopt: 6.0.0
       npmlog: 6.0.2
       rimraf: 3.0.2
-      semver: 7.8.0
+      semver: 7.8.1
       tar: 6.2.1
       which: 2.0.2
     transitivePeerDependencies:
@@ -8997,6 +9003,8 @@ snapshots:
   semver@7.7.4: {}
 
   semver@7.8.0: {}
+
+  semver@7.8.1: {}
 
   serialize-error@7.0.1:
     dependencies:
@@ -9560,7 +9568,7 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.6.1
 
-  vitepress@1.6.4(@algolia/client-search@5.50.0)(@types/node@25.9.0)(@types/react@18.3.28)(axios@1.16.0)(lightningcss@1.32.0)(postcss@8.5.14)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)(typescript@6.0.3):
+  vitepress@1.6.4(@algolia/client-search@5.50.0)(@types/node@25.9.0)(@types/react@18.3.28)(axios@1.16.1)(lightningcss@1.32.0)(postcss@8.5.14)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)(typescript@6.0.3):
     dependencies:
       '@docsearch/css': 3.8.2
       '@docsearch/js': 3.8.2(@algolia/client-search@5.50.0)(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)
@@ -9573,7 +9581,7 @@ snapshots:
       '@vue/devtools-api': 7.7.9
       '@vue/shared': 3.5.31
       '@vueuse/core': 12.8.2(typescript@6.0.3)
-      '@vueuse/integrations': 12.8.2(axios@1.16.0)(focus-trap@7.8.0)(typescript@6.0.3)
+      '@vueuse/integrations': 12.8.2(axios@1.16.1)(focus-trap@7.8.0)(typescript@6.0.3)
       focus-trap: 7.8.0
       mark.js: 8.11.1
       minisearch: 7.2.0
@@ -9654,15 +9662,16 @@ snapshots:
     dependencies:
       xml-name-validator: 5.0.0
 
-  wait-on@9.0.5:
+  wait-on@9.0.10:
     dependencies:
-      axios: 1.16.0
+      axios: 1.16.1
       joi: 18.2.1
       lodash: 4.18.1
       minimist: 1.2.8
       rxjs: 7.8.2
     transitivePeerDependencies:
       - debug
+      - supports-color
 
   wcwidth@1.0.1:
     dependencies:
