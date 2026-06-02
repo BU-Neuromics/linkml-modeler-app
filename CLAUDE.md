@@ -91,7 +91,7 @@ Resolve conflicts in `dev`. Never force-push `main` to "fix" divergence.
 
 ### Promoting `dev → main` (releases)
 
-A `dev → main` promotion is the **only event that produces a release tag**. Releases use **CalVer** (date-based), not SemVer. Compatibility signals live in release notes, not in the version number.
+A `dev → main` promotion is the **only event that produces a release tag**. Releases use **SemVer** (`MAJOR.MINOR.PATCH`). The version number itself carries the compatibility signal: bump **MAJOR** for breaking changes, **MINOR** for backward-compatible features, **PATCH** for fixes and dependency bumps. The curated release notes and `CHANGELOG.md` explain what changed.
 
 #### When to promote (cadence)
 
@@ -108,7 +108,7 @@ Promote when **any** of these triggers fire:
 
 **Agents propose, the project owner approves.** When triggers fire, the agent must:
 
-1. Open a **draft** PR titled `release: v<YYYY.MM.DD>`.
+1. Open a **draft** PR titled `release: v<X.Y.Z>` (choose the bump per the SemVer rules above — MAJOR if the Breaking changes section is non-empty).
 2. Include proposed release notes in the body (see "Release notes" below).
 3. Notify the owner that a release is ready for review.
 
@@ -120,29 +120,33 @@ Before opening the promotion PR:
 
 1. Sync `dev` from `main`: `git checkout dev && git pull && git merge main && git push`. Resolve conflicts in `dev`.
 2. Confirm CI is green on `dev`.
-3. Bump the `version` field in each package's `package.json` to the new CalVer (e.g., `2026.5.19`). Commit on `dev` as part of the promotion PR.
+3. Bump the `version` field in each package's `package.json` to the new SemVer version (e.g., `1.2.0`), keeping all packages in lockstep for now, and update `CHANGELOG.md`. Commit on `dev` as part of the promotion PR. (Independent per-package versioning for `@linkml-editor/core` is tracked in #111.)
 
 After owner approves:
 
 4. **Merge with a merge commit**, not squash. This preserves the per-feature commit history on `main`. (Feature PRs into `dev` use squash; the `dev → main` promotion PR is the one exception.)
 5. Tag the merge commit on `main`:
    ```
-   gh release create v2026.05.19 --target main --generate-notes --title "v2026.05.19" --notes-file release-notes.md
+   gh release create v1.2.0 --target main --generate-notes --title "v1.2.0" --notes-file release-notes.md
    ```
 
-#### Release tag format (CalVer)
+#### Release tag format (SemVer)
 
-- **Git tag**: `vYYYY.MM.DD` with two-digit month and day — e.g., `v2026.05.19`, `v2026.11.03`.
-- **`package.json` `version`**: same date without leading zeros — e.g., `2026.5.19`, `2026.11.3`. This is valid SemVer (MAJOR=2026), so npm/pnpm/electron-builder all accept it cleanly.
+- **Git tag**: `vX.Y.Z` — e.g., `v1.2.0`, `v2.0.0`.
+- **`package.json` `version`**: the same number without the leading `v` — e.g., `1.2.0`. All packages share one version (lockstep) until `core` is split out (#111).
+- **Choosing the bump**:
+  - **MAJOR** (`2.0.0`) — the Breaking changes section is non-empty: a change to `.linkml-editor.yaml` manifest format, a removed/renamed user-facing feature, a required migration, or anything that breaks `@linkml-editor/core`'s public API for an importing app.
+  - **MINOR** (`1.2.0`) — new backward-compatible features.
+  - **PATCH** (`1.1.1`) — fixes, dependency bumps, docs.
 - **One tag per promotion**, on the merge commit on `main`.
-- **Same-day re-release** (emergency hotfix only): append `-1`, `-2` as a SemVer prerelease suffix, e.g., `v2026.05.19-1` and `package.json` `2026.5.19-1`. Avoid by policy — prefer to roll to the next day.
+- **Emergency re-release** (a release shipped broken): cut a **PATCH** bump (`1.2.1`); do not reuse or suffix the bad tag.
 
 #### Release notes
 
-Because CalVer carries no compatibility signal, **release notes carry it instead**. Each promotion PR body includes a curated notes block:
+The version number carries the compatibility signal; the release notes and `CHANGELOG.md` explain *what* changed. Each promotion PR body includes a curated notes block:
 
 ```markdown
-## v2026.05.19
+## v1.2.0
 
 ### Features
 - Persistable named views (#56)
@@ -158,7 +162,7 @@ Because CalVer carries no compatibility signal, **release notes carry it instead
 - ...  (omit if no bumps)
 ```
 
-The **Breaking changes** section must be explicit. It includes: changes to `.linkml-editor.yaml` manifest format, removed or renamed user-facing features, required migrations, and any change that would make a working older project misbehave on the new version. Agents must flag these candidates when drafting notes; owner makes the final call.
+The **Breaking changes** section must be explicit, and **a non-empty Breaking changes section requires a MAJOR version bump**. It includes: changes to `.linkml-editor.yaml` manifest format, removed or renamed user-facing features, required migrations, and any change that would make a working older project misbehave on the new version. Agents must flag these candidates when drafting notes; owner makes the final call.
 
 After merge, `gh release create --notes-file` uses the curated notes as the GitHub release description.
 

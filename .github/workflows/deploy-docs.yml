@@ -10,12 +10,15 @@ on:
       - 'packages/core/**'
       - 'docs/**'
       - '.github/workflows/deploy-docs.yml'
+      - 'pnpm-lock.yaml'
+      - 'package.json'
   workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
   id-token: write
+  issues: write
 
 concurrency:
   group: pages
@@ -89,3 +92,52 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
+  smoke-test:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure base URL
+        run: |
+          OWNER="${GITHUB_REPOSITORY%/*}"
+          REPO="${GITHUB_REPOSITORY##*/}"
+          echo "ORIGIN=https://${OWNER}.github.io" >> "$GITHUB_ENV"
+          echo "BASE_URL=https://${OWNER}.github.io/${REPO}" >> "$GITHUB_ENV"
+
+      - name: Wait for CDN propagation
+        run: sleep 30
+
+      - name: Verify all routes return 200
+        run: |
+          FAILED=0
+          check() {
+            local url="$1"
+            local status
+            status=$(curl -sSL --max-time 30 --retry 3 --retry-delay 10 \
+              -o /dev/null -w "%{http_code}" "$url")
+            if [ "$status" = "200" ]; then
+              printf 'OK    [%s] %s\n' "$status" "$url"
+            else
+              printf 'FAIL  [%s] %s\n' "$status" "$url"
+              FAILED=1
+            fi
+          }
+          check "${BASE_URL}/"
+          check "${BASE_URL}/user-guide"
+          check "${BASE_URL}/development"
+          check "${BASE_URL}/design-spec"
+          check "${BASE_URL}/app/"
+          check "${BASE_URL}/logo.svg"
+          check "${BASE_URL}/favicon.svg"
+          [ "$FAILED" -eq 0 ] || exit 1
+
+      - name: Open a GitHub issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Pages smoke test failed after deploy on $(date -u +%Y-%m-%d)" \
+            --body "Post-deploy smoke test failed for commit \`$GITHUB_SHA\`. Check the [workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) for details." \
+            --label bug || true

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.1] - 2026-06-02
+
+Maintenance release: CI/deploy hardening and release-process documentation. No user-facing application changes.
+
+### Fixed
+
+- **CI/deploy pipeline**: added a path filter and an inline smoke test to the deploy workflow, plus failure alerts (#110)
+
+### Documentation
+
+- Reconciled the documented release process from CalVer to SemVer (#113)
+
 ## [1.1.0] - 2026-06-02
 
 First feature release since the v1.0 OSS launch. Bundles the large-schema UX sprint (12 features), the new Display Panel / Canvas Views workflow with guided tours, per-view and per-subset canvas layout persistence, and a security-hardening pass on transitive dependencies. The web build remains the primary distribution; Electron desktop stays on the future-enhancement track.
