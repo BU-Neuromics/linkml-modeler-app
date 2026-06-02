@@ -15,6 +15,9 @@ export interface ViewsSlice {
   deleteView(id: string): void;
   duplicateView(id: string): ViewDefinition | null;
   updateViewLayout(id: string, layout: ViewLayout): void;
+  subsetLayouts: Record<string, ViewLayout>;
+  updateSubsetLayout(name: string, layout: ViewLayout): void;
+  setSubsetLayouts(layouts: Record<string, ViewLayout>): void;
 }
 
 export const createViewsSlice: StateCreator<ViewsSlice, [], [], ViewsSlice> = (set, get) => ({
@@ -70,6 +73,18 @@ export const createViewsSlice: StateCreator<ViewsSlice, [], [], ViewsSlice> = (s
   updateViewLayout(id, layout) {
     set((state) => ({
       views: state.views.map((v) => (v.id === id ? { ...v, layout } : v)),
+    }));
+  },
+
+  subsetLayouts: {},
+
+  setSubsetLayouts(layouts) {
+    set({ subsetLayouts: layouts });
+  },
+
+  updateSubsetLayout(name, layout) {
+    set((state) => ({
+      subsetLayouts: { ...state.subsetLayouts, [name]: layout },
     }));
   },
 });

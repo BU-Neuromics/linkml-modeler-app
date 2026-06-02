@@ -72,6 +72,7 @@ export interface EditorManifestData {
   schemas?: Record<string, SchemaManifestEntry>;
   views?: ViewDefinition[];
   activeViewId?: string;
+  subsetLayouts?: Record<string, ViewLayout>;
 }
 
 export interface SchemaManifestEntry {
@@ -141,7 +142,8 @@ export function buildManifestData(
   activeLayout: CanvasLayout | null,
   hiddenSchemaIds: Set<string>,
   views: ViewDefinition[] = [],
-  activeViewId: string | null = null
+  activeViewId: string | null = null,
+  subsetLayouts: Record<string, ViewLayout> = {}
 ): EditorManifestData {
   const schemas: Record<string, SchemaManifestEntry> = {};
 
@@ -172,6 +174,7 @@ export function buildManifestData(
     ...(Object.keys(schemas).length > 0 ? { schemas } : {}),
     ...(views.length > 0 ? { views } : {}),
     ...(activeViewId ? { activeViewId } : {}),
+    ...(Object.keys(subsetLayouts).length > 0 ? { subsetLayouts } : {}),
   };
 }
 
@@ -216,7 +219,7 @@ function migrateNodeKeys(
 export function applyManifestToSchemas(
   schemas: SchemaFile[],
   manifest: EditorManifestData
-): { schemas: SchemaFile[]; hiddenSchemaIds: Set<string>; views: ViewDefinition[]; activeViewId: string | null } {
+): { schemas: SchemaFile[]; hiddenSchemaIds: Set<string>; views: ViewDefinition[]; activeViewId: string | null; subsetLayouts: Record<string, ViewLayout> } {
   const hiddenSchemaIds = new Set<string>();
   const manifestSchemas = manifest.schemas ?? {};
 
@@ -244,5 +247,6 @@ export function applyManifestToSchemas(
     hiddenSchemaIds,
     views: manifest.views ?? [],
     activeViewId: manifest.activeViewId ?? null,
+    subsetLayouts: manifest.subsetLayouts ?? {},
   };
 }

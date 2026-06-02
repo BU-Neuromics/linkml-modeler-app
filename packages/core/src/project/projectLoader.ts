@@ -5,7 +5,7 @@ import type { Project, SchemaFile } from '../model/index.js';
 import { emptyCanvasLayout, emptySchema } from '../model/index.js';
 import { parseYaml } from '../io/yaml.js';
 import { resolveImports } from '../io/importResolver.js';
-import { readEditorManifest, applyManifestToSchemas, type ViewDefinition } from '../io/editorManifest.js';
+import { readEditorManifest, applyManifestToSchemas, type ViewDefinition, type ViewLayout } from '../io/editorManifest.js';
 
 /**
  * Check if a YAML string looks like a LinkML schema by testing for
@@ -25,7 +25,7 @@ export function looksLikeLinkMLSchema(content: string): boolean {
 export async function openProjectFromDirectory(
   dirPath: string,
   platform: PlatformAPI
-): Promise<{ project: Project; hiddenSchemaIds: Set<string>; views: ViewDefinition[]; activeViewId: string | null }> {
+): Promise<{ project: Project; hiddenSchemaIds: Set<string>; views: ViewDefinition[]; activeViewId: string | null; subsetLayouts: Record<string, ViewLayout> }> {
   const entries = await platform.listDirectory(dirPath);
   const yamlFiles = entries.filter(
     (e) => !e.isDirectory && /\.(ya?ml)$/i.test(e.name)
@@ -60,9 +60,9 @@ export async function openProjectFromDirectory(
 
   // Apply editor manifest (layout + visibility + views) if present
   const manifest = await readEditorManifest(platform, dirPath);
-  const { schemas: schemasWithLayout, hiddenSchemaIds, views, activeViewId } = manifest
+  const { schemas: schemasWithLayout, hiddenSchemaIds, views, activeViewId, subsetLayouts } = manifest
     ? applyManifestToSchemas(allSchemas, manifest)
-    : { schemas: allSchemas, hiddenSchemaIds: new Set<string>(), views: [], activeViewId: null };
+    : { schemas: allSchemas, hiddenSchemaIds: new Set<string>(), views: [], activeViewId: null, subsetLayouts: {} as Record<string, ViewLayout> };
 
   const dirName = dirPath.split(/[\\/]/).filter(Boolean).pop() ?? 'Untitled Project';
 
@@ -75,7 +75,7 @@ export async function openProjectFromDirectory(
     updatedAt: new Date().toISOString(),
   };
 
-  return { project, hiddenSchemaIds, views, activeViewId };
+  return { project, hiddenSchemaIds, views, activeViewId, subsetLayouts };
 }
 
 /**
