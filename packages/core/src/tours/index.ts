@@ -7,6 +7,7 @@
  */
 import { driver, type DriveStep, type Config } from 'driver.js';
 import 'driver.js/dist/driver.css';
+import { useAppStore } from '../store/index.js';
 
 // ── Theme-aware styles for driver.js popovers ─────────────────────────────────
 // Uses CSS custom properties from tokens.css so light/dark theme switching
@@ -139,6 +140,20 @@ const BASE_CONFIG: Partial<Config> = {
   progressText: '{{current}} of {{total}}',
 };
 
+// ── Helper: poll for a DOM element then invoke callback ───────────────────────
+// Advances to the next step once selector is present in the DOM, or after
+// timeoutMs if the element never arrives (e.g. empty schema).
+
+function waitForElement(selector: string, onReady: () => void, timeoutMs = 2000): void {
+  const deadline = Date.now() + timeoutMs;
+  const interval = window.setInterval(() => {
+    if (document.querySelector(selector) || Date.now() >= deadline) {
+      window.clearInterval(interval);
+      onReady();
+    }
+  }, 50);
+}
+
 // ── Tour: App Overview ────────────────────────────────────────────────────────
 
 const overviewSteps: DriveStep[] = [
@@ -208,6 +223,16 @@ const overviewSteps: DriveStep[] = [
       title: 'Properties Panel',
       description:
         'Click any node on the canvas to select it. The <b>Properties Panel</b> on the right will show its editable fields — name, description, slots, enums, inheritance, and more.',
+      side: 'left',
+      align: 'start',
+    },
+  },
+  {
+    element: '#lme-display-panel',
+    popover: {
+      title: 'Display Panel',
+      description:
+        'The <b>Display Panel</b> controls how the canvas looks: switch rendering modes (canvas / outline / table), filter edge types, expand selections by neighbourhood, and tune hop dimming and clustering.',
       side: 'left',
       align: 'start',
     },
@@ -529,6 +554,262 @@ const gitSteps: DriveStep[] = [
   },
 ];
 
+// ── Tour: Display Panel & Canvas Views ───────────────────────────────────────
+// onNextClick for mode-switching steps uses opts.driver from the callback args
+// so the steps array is fully static.
+
+const displayPanelSteps: DriveStep[] = [
+  {
+    element: '#lme-display-panel',
+    popover: {
+      title: 'Display Panel',
+      description:
+        'The <b>Display Panel</b> is your visual control centre. It lets you switch rendering modes, filter edge types, tune highlights, expand node selections by neighbourhood, and adjust advanced canvas settings.',
+      side: 'left',
+      align: 'start',
+    },
+  },
+  {
+    element: '#lme-display-mode-canvas',
+    popover: {
+      title: 'Rendering Modes',
+      description:
+        'Switch between three canvas views: <b>canvas</b> (ERD diagram), <b>outline</b> (collapsible tree), and <b>table</b> (spreadsheet). The tour will demonstrate each one live.',
+      side: 'left',
+      align: 'start',
+    },
+  },
+  {
+    element: '#lme-display-toggle-range',
+    popover: {
+      title: 'Edge Filters',
+      description:
+        'Toggle the visibility of each edge type — <b>range</b> (slot type arrows), <b>is_a</b> (inheritance), <b>mixin</b>, and <b>union_of</b>. Hiding irrelevant edge types reduces visual clutter on dense schemas.',
+      side: 'left',
+      align: 'start',
+    },
+  },
+  {
+    element: '#lme-display-highlight-hover',
+    popover: {
+      title: 'Highlight on Hover / Selection',
+      description:
+        'When <b>Hover</b> is on, hovering a node highlights its edges and dims unrelated ones. <b>Selection</b> does the same but stays active while a node is selected.',
+      side: 'left',
+      align: 'start',
+    },
+  },
+  {
+    element: '#lme-sel-neighbors-both',
+    popover: {
+      title: 'Selection Neighborhood',
+      description:
+        'Expand your selection by graph neighbourhood: <b>neighbors</b>, directional <b>in/out</b>, <b>ancestors</b>/<b>descendants</b> via inheritance, <b>component</b> (all connected nodes), and slot <b>range</b> targets/sources.',
+      side: 'left',
+      align: 'start',
+    },
+  },
+  {
+    element: '#lme-sel-save-view',
+    popover: {
+      title: 'Save Selection as View',
+      description:
+        'After expanding or hand-picking a selection, click <b>save as view</b> to save it as a named view in the Project Panel. The view remembers which nodes were selected and can be activated any time.',
+      side: 'left',
+      align: 'start',
+    },
+  },
+  {
+    element: '#lme-display-range-edges-show',
+    popover: {
+      title: 'Range Edge Rendering',
+      description:
+        'Choose how slot range relationships are drawn: <b>show</b> draws arrows, <b>inline</b> renders the type as a chip inside the class box, and <b>auto</b> picks the best mode based on schema density.',
+      side: 'left',
+      align: 'start',
+    },
+  },
+  {
+    element: '#lme-display-hop-dimming-toggle',
+    popover: {
+      title: 'Hop-Distance Dimming',
+      description:
+        'When enabled, nodes farther than <b>N hops</b> from your selection are dimmed. Useful for tracing local neighbourhoods without hiding nodes entirely. Adjust the hop count with the number input.',
+      side: 'left',
+      align: 'start',
+    },
+  },
+  {
+    element: '#lme-display-group-by-import-source',
+    popover: {
+      title: 'Import-Source Clustering',
+      description:
+        'When enabled, nodes are grouped into swimlane backgrounds by their source schema. Useful when your project imports multiple schemas — you can instantly see which entities belong to which file.',
+      side: 'left',
+      align: 'start',
+    },
+  },
+  // Switch to Outline: onNextClick drives the canvas live, then advances.
+  {
+    element: '#lme-display-mode-outline',
+    popover: {
+      title: 'Outline Mode — Live Demo',
+      description:
+        'Click <b>Next</b> to switch the canvas to <b>Outline mode</b>. Outline mode shows a collapsible tree of all classes and enums — great for navigating large schemas without the ERD clutter.',
+      side: 'left',
+      align: 'start',
+      onNextClick: (_el, _step, opts) => {
+        useAppStore.getState().setGlobalRenderMode('outline');
+        waitForElement('#lme-outline-view', () => opts.driver.moveNext());
+      },
+    },
+  },
+  {
+    element: '#lme-outline-view',
+    popover: {
+      title: 'Outline View',
+      description:
+        'The <b>Outline view</b> shows your schema as a collapsible tree. Classes are arranged in inheritance order with their slots nested beneath. Clicking a row selects it — the Properties Panel updates accordingly.',
+      side: 'right',
+      align: 'start',
+    },
+  },
+  // lme-outline-classes-header is present when any classes exist; driver.js
+  // gracefully centres the popover if the schema is empty.
+  {
+    element: '#lme-outline-classes-header',
+    popover: {
+      title: 'Classes Section',
+      description:
+        'The <b>Classes</b> section header separates class rows from enum rows. Classes are sorted alphabetically and shown in their inheritance hierarchy — child classes are indented under their parents.',
+      side: 'right',
+      align: 'start',
+    },
+  },
+  // Switch to Table from the last outline step: enable flag + switch, then advance.
+  {
+    element: '#lme-outline-enums-header',
+    popover: {
+      title: 'Enums Section',
+      description:
+        'The <b>Enums</b> section lists all enumerations. Expand an enum row to see its permissible values. Click any enum to select it and view or edit it in the Properties Panel.',
+      side: 'right',
+      align: 'start',
+      onNextClick: (_el, _step, opts) => {
+        const store = useAppStore.getState();
+        store.setTableModeEnabled(true);
+        store.setGlobalRenderMode('table');
+        waitForElement('#lme-table-root', () => opts.driver.moveNext());
+      },
+    },
+  },
+  {
+    element: '#lme-table-root',
+    popover: {
+      title: 'Table View',
+      description:
+        'The <b>Table view</b> renders your schema as a spreadsheet for bulk editing. Switch between <b>Classes</b>, <b>Slots</b>, and <b>Enums</b> rows using the toolbar. Click any cell to edit inline.',
+      side: 'top',
+      align: 'start',
+    },
+  },
+];
+
+// ── Tour: Views & Subsets ─────────────────────────────────────────────────────
+
+const viewsSubsetsSteps: DriveStep[] = [
+  {
+    element: '#lme-project-panel',
+    popover: {
+      title: 'Views & Subsets',
+      description:
+        'The <b>Project Panel</b> hosts two powerful ways to organise your schema: <b>Views</b> (editor-only saved perspectives) and <b>Subsets</b> (LinkML first-class groupings written to your YAML). Both sections live in the lower part of this panel.',
+      side: 'right',
+      align: 'start',
+    },
+  },
+  {
+    element: '#lme-views-section',
+    popover: {
+      title: 'Views Section',
+      description:
+        'The <b>Views</b> section lists named canvas perspectives. Each view remembers which nodes were selected when you saved it, and can also store its own render mode and edge-filter overrides. Views are stored in <code>.linkml-editor.yaml</code> — not in your schema YAML.',
+      side: 'right',
+      align: 'start',
+    },
+  },
+  {
+    element: '#lme-views-section',
+    popover: {
+      title: 'Saving a View from Selection',
+      description:
+        'Select one or more nodes on the canvas, then click the <b>+</b> button in the Views header to save that selection as a new named view. The view highlights those nodes whenever it is activated.',
+      side: 'right',
+      align: 'center',
+    },
+  },
+  {
+    element: '#lme-views-section',
+    popover: {
+      title: 'Activating & Editing Views',
+      description:
+        'Click any view row to activate it — the canvas focuses on that view\'s members. Each row has action buttons: <b>✎</b> rename, <b>⧉</b> duplicate, <b>⬆</b> promote to a LinkML subset, and <b>×</b> delete.',
+      side: 'right',
+      align: 'center',
+    },
+  },
+  {
+    element: '#lme-subsets-section',
+    popover: {
+      title: 'Subsets Section',
+      description:
+        'The <b>Subsets</b> section lists LinkML <code>subsets</code> defined in your active schema. Subsets are written to your YAML and can be used downstream for filtering, documentation, and code generation.',
+      side: 'right',
+      align: 'start',
+    },
+  },
+  {
+    element: '#lme-subsets-section',
+    popover: {
+      title: 'Creating a Subset',
+      description:
+        'Click the <b>+</b> button in the Subsets header to create a new LinkML subset. Type the name and press Enter. The subset is added to your schema YAML immediately.',
+      side: 'right',
+      align: 'center',
+    },
+  },
+  {
+    element: '#lme-subsets-section',
+    popover: {
+      title: 'Subset Row Actions',
+      description:
+        'Each subset row has action buttons: <b>✎</b> rename, <b>⬇</b> demote to a view (copies members into an editor view without modifying schema YAML), and <b>×</b> delete.',
+      side: 'right',
+      align: 'center',
+    },
+  },
+  {
+    element: '#lme-properties-panel',
+    popover: {
+      title: 'Subset Membership via Properties',
+      description:
+        'Select a class or enum on the canvas, then look for the <b>"In Subsets"</b> section in the Properties Panel. Use the checkboxes to add or remove the entity from any subset — the YAML updates immediately.',
+      side: 'left',
+      align: 'start',
+    },
+  },
+  {
+    element: '#lme-views-section',
+    popover: {
+      title: 'Promote View → Subset',
+      description:
+        'Click <b>⬆</b> on a view row to promote it to a full LinkML subset. All the view\'s members are tagged with the new subset in your schema YAML, and the view is replaced by the subset in the Subsets list.',
+      side: 'right',
+      align: 'start',
+    },
+  },
+];
+
 // ── Tour registry & launcher ──────────────────────────────────────────────────
 
 export type TourId =
@@ -537,16 +818,41 @@ export type TourId =
   | 'canvas'
   | 'properties'
   | 'validation'
-  | 'git';
+  | 'git'
+  | 'display-panel'
+  | 'views-subsets';
 
-const TOURS: Record<TourId, DriveStep[]> = {
+export const TOURS: Record<TourId, DriveStep[]> = {
   overview: overviewSteps,
   'project-panel': projectPanelSteps,
   canvas: canvasSteps,
   properties: propertiesSteps,
   validation: validationSteps,
   git: gitSteps,
+  'display-panel': displayPanelSteps,
+  'views-subsets': viewsSubsetsSteps,
 };
+
+/**
+ * Exported for test coverage: every TourId must have an entry here, and the
+ * test verifies that every entry has a matching TOURS record + Help-menu
+ * launcher. MenuBar iterates this array to build the Help menu tour items.
+ */
+export const HELP_TOUR_DEFS: ReadonlyArray<{
+  id: TourId;
+  label: string;
+  requiresProject: boolean;
+}> = [
+  { id: 'overview',       label: '▶ App Overview',                    requiresProject: false },
+  { id: 'overview',       label: '▶ Getting Started (Splash Page)',    requiresProject: true  },
+  { id: 'project-panel',  label: '▶ Project Panel',                   requiresProject: true  },
+  { id: 'canvas',         label: '▶ Canvas & Workspace',              requiresProject: true  },
+  { id: 'properties',     label: '▶ Properties & YAML Preview',       requiresProject: true  },
+  { id: 'validation',     label: '▶ Validation',                      requiresProject: true  },
+  { id: 'git',            label: '▶ Git Workflow',                    requiresProject: true  },
+  { id: 'display-panel',  label: '▶ Display Panel & Canvas Views',    requiresProject: true  },
+  { id: 'views-subsets',  label: '▶ Views & Subsets',                 requiresProject: true  },
+];
 
 /**
  * Start a named tour. Panels that the tour requires are opened first so their
@@ -560,6 +866,7 @@ export function startTour(
     openGitPanel?: () => void;
     openPropertiesPanel?: () => void;
     openYamlPreview?: () => void;
+    openProjectPanel?: () => void;
   }
 ): void {
   // Pre-open panels required by this tour so their elements are in the DOM.
@@ -575,11 +882,58 @@ export function startTour(
   if (id === 'properties') {
     opts?.openYamlPreview?.();
   }
+  if (id === 'views-subsets') {
+    opts?.openProjectPanel?.();
+    opts?.openPropertiesPanel?.();
+  }
+
+  injectStyles();
+
+  if (id === 'display-panel') {
+    // Capture render state before the tour so we can restore it on exit.
+    const store = useAppStore.getState();
+    const originalMode = store.globalRenderMode;
+    const originalTableMode = store.tableModeEnabled;
+    const originalViewId = store.activeViewId;
+
+    // Deactivate any active view so globalRenderMode drives the canvas directly.
+    if (originalViewId !== null) {
+      store.setActiveViewId(null);
+    }
+
+    setTimeout(() => {
+      const d = driver({
+        ...BASE_CONFIG,
+        steps: displayPanelSteps,
+        onDestroyed: () => {
+          const s = useAppStore.getState();
+          s.setGlobalRenderMode(originalMode);
+          s.setTableModeEnabled(originalTableMode);
+          if (originalViewId !== null) {
+            s.setActiveViewId(originalViewId);
+          }
+        },
+      });
+      d.drive();
+    }, 80);
+    return;
+  }
+
+  if (id === 'views-subsets') {
+    setTimeout(() => {
+      // Expand Views and Subsets sections if the user had them collapsed.
+      const viewsBtn = document.getElementById('lme-views-section') as HTMLButtonElement | null;
+      const subsetsBtn = document.getElementById('lme-subsets-section') as HTMLButtonElement | null;
+      if (viewsBtn?.title === 'Expand views') viewsBtn.click();
+      if (subsetsBtn?.title === 'Expand subsets') subsetsBtn.click();
+
+      const d = driver({ ...BASE_CONFIG, steps: viewsSubsetsSteps });
+      d.drive();
+    }, 80);
+    return;
+  }
 
   const steps = TOURS[id];
-
-  // Inject theme-aware CSS once, then drive.
-  injectStyles();
 
   // Small delay so React can flush any state updates from the panel opens above.
   setTimeout(() => {
