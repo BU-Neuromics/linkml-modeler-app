@@ -396,6 +396,17 @@ function SchemaCanvasInner() {
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ name: string; type: 'class' | 'enum' } | null>(null);
 
+  // Defense-in-depth: the drag overlay is global and selectEffectiveLayout merges
+  // it onto whatever base is active, including the schema. A drag never spans a
+  // context switch, so any overlay surviving an activeView/focus change is stale —
+  // drop it so it can never paint onto the next context's layout (#105).
+  useEffect(() => {
+    if (Object.keys(nodeDragOverlayRef.current).length > 0) {
+      nodeDragOverlayRef.current = {};
+      setNodeDragOverlay({});
+    }
+  }, [activeViewId, focusMode]);
+
   const activeSchemaFile = useMemo(
     () => activeProject?.schemas.find((s) => s.id === activeSchemaId),
     [activeProject, activeSchemaId]
@@ -560,61 +571,79 @@ function SchemaCanvasInner() {
       setNodes(applyNodeChanges(changes, storeNodes) as typeof storeNodes);
       let positionChanged = false;
       for (const change of changes) {
-        if (change.type === 'position' && change.position) {
-          if (change.id.startsWith('label__')) {
-            const labelId = change.id.slice('label__'.length);
-            setLabelDragPositions((prev) => ({
-              ...prev,
-              [labelId]: { x: change.position!.x, y: change.position!.y },
-            }));
-            // Commit final position to store on drag end, then clear local drag state
-            if (!change.dragging && activeSchemaId) {
-              updateLabelInCanvas(activeSchemaId, labelId, { x: change.position!.x, y: change.position!.y });
-              setLabelDragPositions((prev) => {
-                const next = { ...prev };
-                delete next[labelId];
-                return next;
-              });
-            }
-            positionChanged = true;
-          } else {
-            const isViewActive = !!activeViewId;
-            const isSubsetActive = !isViewActive && focusMode?.type === 'subset';
-            if (isViewActive || isSubsetActive) {
-              nodeDragOverlayRef.current = {
-                ...nodeDragOverlayRef.current,
-                [change.id]: { x: change.position!.x, y: change.position!.y },
-              };
-              setNodeDragOverlay({ ...nodeDragOverlayRef.current });
-              if (!change.dragging) {
-                const baseNodes = selectEffectiveLayout(
-                  localLayoutRef.current, activeViewId, views, focusMode, subsetLayouts, {}
-                ).nodes;
-                const fullLayout: import('../io/editorManifest.js').ViewLayout = {
-                  nodes: { ...baseNodes, ...nodeDragOverlayRef.current },
-                  viewport: localLayoutRef.current.viewport,
-                };
-                if (activeViewId) {
-                  updateViewLayout(activeViewId, fullLayout);
-                } else if (focusMode?.type === 'subset') {
-                  updateSubsetLayout(focusMode.subsetName, fullLayout);
-                }
-                nodeDragOverlayRef.current = {};
-                setNodeDragOverlay({});
-              }
-            } else {
-              setLocalLayout((prev) => ({
-                ...prev,
-                nodes: {
-                  ...prev.nodes,
-                  [change.id]: { x: change.position!.x, y: change.position!.y },
-                },
-                edges: undefined,
-              }));
-              updateNodePosition(change.id, change.position.x, change.position.y);
-            }
-            positionChanged = true;
+        if (change.type !== 'position') continue;
+
+        // Label drags persist directly to the schema's label store.
+        if (change.id.startsWith('label__')) {
+          if (!change.position) continue;
+          const labelId = change.id.slice('label__'.length);
+          setLabelDragPositions((prev) => ({
+            ...prev,
+            [labelId]: { x: change.position!.x, y: change.position!.y },
+          }));
+          // Commit final position to store on drag end, then clear local drag state
+          if (!change.dragging && activeSchemaId) {
+            updateLabelInCanvas(activeSchemaId, labelId, { x: change.position!.x, y: change.position!.y });
+            setLabelDragPositions((prev) => {
+              const next = { ...prev };
+              delete next[labelId];
+              return next;
+            });
           }
+          positionChanged = true;
+          continue;
+        }
+
+        const isViewActive = !!activeViewId;
+        const isSubsetActive = !isViewActive && focusMode?.type === 'subset';
+
+        // Accumulate the live position while a position payload is present.
+        if (change.position) {
+          if (isViewActive || isSubsetActive) {
+            // View/subset drags go to a transient overlay; committed on drag end.
+            nodeDragOverlayRef.current = {
+              ...nodeDragOverlayRef.current,
+              [change.id]: { x: change.position.x, y: change.position.y },
+            };
+            setNodeDragOverlay({ ...nodeDragOverlayRef.current });
+          } else {
+            // Plain schema drag — update the base layout directly.
+            setLocalLayout((prev) => ({
+              ...prev,
+              nodes: {
+                ...prev.nodes,
+                [change.id]: { x: change.position!.x, y: change.position!.y },
+              },
+            }));
+            updateNodePosition(change.id, change.position.x, change.position.y);
+          }
+          positionChanged = true;
+        }
+
+        // Commit the overlay to the active view/subset on drag end.
+        // ReactFlow's terminal drag-stop change carries `dragging: false` with
+        // NO position, so this must NOT be gated on `change.position` — otherwise
+        // the overlay is never committed and leaks onto the schema layout (#105).
+        if (
+          change.dragging === false &&
+          (isViewActive || isSubsetActive) &&
+          Object.keys(nodeDragOverlayRef.current).length > 0
+        ) {
+          const baseNodes = selectEffectiveLayout(
+            localLayoutRef.current, activeViewId, views, focusMode, subsetLayouts, {}
+          ).nodes;
+          const fullLayout: import('../io/editorManifest.js').ViewLayout = {
+            nodes: { ...baseNodes, ...nodeDragOverlayRef.current },
+            viewport: localLayoutRef.current.viewport,
+          };
+          if (activeViewId) {
+            updateViewLayout(activeViewId, fullLayout);
+          } else if (focusMode?.type === 'subset') {
+            updateSubsetLayout(focusMode.subsetName, fullLayout);
+          }
+          nodeDragOverlayRef.current = {};
+          setNodeDragOverlay({});
+          positionChanged = true;
         }
       }
       if (positionChanged) scheduleManifestWrite();
