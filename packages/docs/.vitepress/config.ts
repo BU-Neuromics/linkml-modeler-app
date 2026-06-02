@@ -25,6 +25,14 @@ export default defineConfig({
         ],
       },
       {
+        text: 'Canvas & Display',
+        items: [
+          { text: 'Display Panel', link: '/display-panel' },
+          { text: 'View Modes (Canvas / Outline / Table)', link: '/view-modes' },
+          { text: 'Named Views & Subsets', link: '/views-and-subsets' },
+        ],
+      },
+      {
         text: 'Developer',
         items: [
           { text: 'Development Guide', link: '/development' },

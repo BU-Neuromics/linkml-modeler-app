@@ -16,3 +16,4 @@ playwright-report/
 # Claude Code local state
 .claude/
 .agents/
+.vitepress

@@ -155,6 +155,7 @@ export function DisplayPanel() {
         <span style={styles.headerTitle}>Display</span>
       </div>
 
+      <div style={styles.body}>
       {/* A2: Rendering mode switcher */}
       <div style={styles.section}>
         <div style={styles.sectionHeader}>Rendering</div>
@@ -506,6 +507,7 @@ export function DisplayPanel() {
           </button>
         </div>
       </div>
+      </div>
     </div>
   );
 }
@@ -533,6 +535,11 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--color-fg-muted)',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  body: {
+    flex: 1,
+    overflowY: 'auto',
+    minHeight: 0,
   },
   section: {
     borderBottom: '1px solid var(--color-border-subtle)',

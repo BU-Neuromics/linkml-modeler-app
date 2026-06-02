@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAppStore, useTemporalStore } from '../store/index.js';
-import { startTour, type TourId } from '../tours/index.js';
+import { startTour, HELP_TOUR_DEFS, type TourId } from '../tours/index.js';
 import { version } from '../../package.json';
 import { useTheme } from '../ui/useTheme.js';
 
@@ -207,6 +207,7 @@ export function MenuBar({
       openGitPanel: () => store.setGitPanelOpen(true),
       openPropertiesPanel: () => store.setPropertiesPanelOpen(true),
       openYamlPreview: () => store.setYamlPreviewOpen(true),
+      openProjectPanel: () => store.setProjectPanelOpen(true),
     });
   }, []);
 
@@ -259,15 +260,20 @@ export function MenuBar({
     { label: 'Toggle Git Panel', checked: gitPanelOpen, action: () => setGitPanelOpen(!gitPanelOpen) },
   ];
 
+  // Build Help-menu tour items from the exported HELP_TOUR_DEFS constant.
+  // The first def (requiresProject: false) gets its own group before the separator;
+  // all project-required defs are listed after the separator.
+  const alwaysTourItems: MenuEntry[] = HELP_TOUR_DEFS
+    .filter((def) => !def.requiresProject)
+    .map((def) => ({ label: def.label, action: () => launchTour(def.id) }));
+  const projectTourItems: MenuEntry[] = HELP_TOUR_DEFS
+    .filter((def) => def.requiresProject)
+    .map((def) => ({ label: def.label, action: () => launchTour(def.id), disabled: !activeProject }));
+
   const helpItems: MenuEntry[] = [
-    { label: '▶ App Overview', action: () => launchTour('overview') },
+    ...alwaysTourItems,
     { separator: true },
-    { label: '▶ Getting Started (Splash Page)', action: () => launchTour('overview'), disabled: !activeProject },
-    { label: '▶ Project Panel', action: () => launchTour('project-panel'), disabled: !activeProject },
-    { label: '▶ Canvas & Workspace', action: () => launchTour('canvas'), disabled: !activeProject },
-    { label: '▶ Properties & YAML Preview', action: () => launchTour('properties'), disabled: !activeProject },
-    { label: '▶ Validation', action: () => launchTour('validation'), disabled: !activeProject },
-    { label: '▶ Git Workflow', action: () => launchTour('git'), disabled: !activeProject },
+    ...projectTourItems,
     { separator: true },
     { label: 'Keyboard Shortcuts', action: () => setShortcutsOpen(true) },
     { label: 'Documentation', action: () => window.open('https://linkml.io/linkml/', '_blank') },

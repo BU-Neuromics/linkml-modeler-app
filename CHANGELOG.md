@@ -1,5 +1,52 @@
 # Changelog
 
+## [1.1.0] - 2026-06-02
+
+First feature release since the v1.0 OSS launch. Bundles the large-schema UX sprint (12 features), the new Display Panel / Canvas Views workflow with guided tours, per-view and per-subset canvas layout persistence, and a security-hardening pass on transitive dependencies. The web build remains the primary distribution; Electron desktop stays on the future-enhancement track.
+
+### Added
+
+#### Large-schema UX sprint (A1–D1, #86)
+
+- **Named views (A1)**: persistable named views — save, switch, duplicate, and delete curated canvas views; the active view and its per-view node layout persist in `.linkml-editor.yaml` (#69)
+- **Outline / tree view (A2)**: alternate tree-based rendering mode for navigating large schemas (#72)
+- **Selection neighborhood operations (A3)**: grow and shrink the selection by graph neighborhood (#71)
+- **Subset editing (A4)**: inline subset-membership editor backed by store mutations (#85)
+- **Display Panel sidebar (B0)**: dedicated sidebar for display and visibility controls (#70)
+- **Range-edges mode (B1)**: show / inline / auto rendering for range edges (#78)
+- **Edge-type filters (B2)**: hide edge types by kind; hidden edges are also removed from ELK auto-layout (#80)
+- **Hop-distance dimming (B3)**: dim nodes by graph distance from the current selection (#81)
+- **Dissolve ghost-node grouping (B4)**: remove the `importGroup` compound grouping for cleaner imported-entity layout (#68)
+- **Command Palette (C1)**: Cmd-K / Ctrl-K command palette for quick actions (#75)
+- **Tabular bulk edit (C2)**: `TableView` spreadsheet component for bulk attribute and slot editing (#79)
+- **Import-source clustering (D1)**: swimlane background tinting that clusters entities by import source (#82)
+
+#### Display Panel, Canvas Views & guided tours
+
+- **Display Panel & Canvas Views**: expanded Display Panel with canvas view-mode switching (#104)
+- **Guided tours**: driver.js help tours covering the Views & Subsets workflows (#104)
+- **Per-view & per-subset canvas layouts**: node positions are now preserved per named view and per subset, persisted via a new optional `subsetLayouts` field in `.linkml-editor.yaml` (#106)
+
+### Fixed
+
+- **Display Panel**: panel content now scrolls when it is taller than the viewport (#108)
+
+### Security
+
+- Patched 9 of 10 transitive-dependency advisories via pnpm `overrides` (#98)
+
+### Documentation
+
+- New docs pages: Display Panel, View Modes, and Named Views & Subsets (#102)
+
+### Dependencies
+
+- Maintenance bumps since v1.0.0, including zustand 4 → 5, Electron 42.2.0, Vite 8.0.14, Vitest 4.1.7, isomorphic-git 1.38.1, and lucide-react 1.17.0, plus routine Dependabot updates.
+
+### Breaking changes
+
+- None. The new `subsetLayouts` field in `.linkml-editor.yaml` is optional and additive: projects created by older versions open unchanged, and the field is ignored by builds that do not understand it.
+
 ## [1.0.0-rc.1] - 2026-05-01
 
 Release candidate for v1.0 — first public OSS launch. Web build is the primary distribution; Electron desktop is descoped from v1.0 and remains as a future-enhancement track.
