@@ -569,6 +569,7 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     textAlign: 'left' as const,
     width: '100%',
+    color: 'var(--color-fg-primary)',
   },
   disabledBtn: {
     opacity: 0.4,
