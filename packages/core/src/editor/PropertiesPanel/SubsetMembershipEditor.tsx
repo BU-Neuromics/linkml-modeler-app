@@ -41,7 +41,7 @@ export function SubsetMembershipEditor({ schemaId, entityName, kind }: Props) {
   if (subsetNames.length === 0) return null;
 
   return (
-    <>
+    <div id="lme-subset-membership">
       <SectionHeader title="In Subsets" />
       <div style={subsetStyles.list}>
         {subsetNames.map((sn) => {
@@ -66,7 +66,7 @@ export function SubsetMembershipEditor({ schemaId, entityName, kind }: Props) {
           );
         })}
       </div>
-    </>
+    </div>
   );
 }
 

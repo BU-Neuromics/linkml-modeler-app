@@ -393,6 +393,7 @@ export function ProjectPanel() {
       {!searchMode && (
         <>
           <button
+            id="lme-views-section"
             type="button"
             style={styles.importsSectionHeader}
             onClick={() => setViewsCollapsed((c) => !c)}
@@ -500,6 +501,7 @@ export function ProjectPanel() {
       {!searchMode && (
         <>
           <button
+            id="lme-subsets-section"
             type="button"
             style={styles.importsSectionHeader}
             onClick={() => setSubsetsCollapsed((c) => !c)}

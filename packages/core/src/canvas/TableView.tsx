@@ -450,7 +450,7 @@ export function TableView() {
   }
 
   return (
-    <div style={styles.root}>
+    <div id="lme-table-root" style={styles.root}>
       {/* Toolbar: row type switcher + stats */}
       <div style={styles.toolbar}>
         <span style={styles.toolbarLabel}>Show:</span>

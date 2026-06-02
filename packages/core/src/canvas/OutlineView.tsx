@@ -583,8 +583,12 @@ export function OutlineView() {
     >
       {rows.map((row, i) => {
         if (row.kind === 'section') {
+          const sectionId =
+            row.label === 'Classes' ? 'lme-outline-classes-header' :
+            row.label === 'Enums' ? 'lme-outline-enums-header' :
+            undefined;
           return (
-            <div key={`section-${i}`} style={styles.sectionHeader}>
+            <div key={`section-${i}`} id={sectionId} style={styles.sectionHeader}>
               {row.label}
             </div>
           );
