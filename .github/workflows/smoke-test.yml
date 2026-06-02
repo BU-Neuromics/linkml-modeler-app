@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   smoke-test:
@@ -31,8 +32,8 @@ jobs:
           check() {
             local url="$1"
             local status
-            status=$(curl -fsSL --max-time 30 --retry 3 --retry-delay 10 \
-              -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+            status=$(curl -sSL --max-time 30 --retry 3 --retry-delay 10 \
+              -o /dev/null -w "%{http_code}" "$url")
             if [ "$status" = "200" ]; then
               printf 'OK    [%s] %s\n' "$status" "$url"
             else
@@ -71,7 +72,7 @@ jobs:
             fi
             local url="${ORIGIN}${abs_path}"
             local status
-            status=$(curl -fsSL --max-time 30 -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+            status=$(curl -sSL --max-time 30 -o /dev/null -w "%{http_code}" "$url")
             if [ "$status" = "200" ]; then
               printf 'OK    [%s] %s\n' "$status" "$url"
             else
@@ -88,3 +89,14 @@ jobs:
           check_asset "CSS bundle" "$CSS_PATH"
 
           [ "$FAILED" -eq 0 ] || exit 1
+
+      - name: Open a GitHub issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Pages smoke test failed on $(date -u +%Y-%m-%d) (scheduled)" \
+            --body "The scheduled deployment smoke test failed. Check the [workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) for which routes returned non-200 responses." \
+            --label bug || true
