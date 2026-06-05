@@ -17,7 +17,7 @@
     "isomorphic-git": "^1.38.1",
     "lucide-react": "^1.17.0",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6",
+    "react-dom": "^19.2.7",
     "reactflow": "^11.11.0"
   },
   "devDependencies": {
