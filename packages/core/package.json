@@ -39,7 +39,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.0.2",
     "@vitest/coverage-v8": "^4.1.7",
-    "fast-check": "^4.7.0",
+    "fast-check": "^4.8.0",
     "jsdom": "^29.1.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.14",
