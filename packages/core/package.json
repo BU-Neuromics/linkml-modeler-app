@@ -42,7 +42,7 @@
     "fast-check": "^4.7.0",
     "jsdom": "^29.1.1",
     "typescript": "^6.0.3",
-    "vite": "^8.0.14",
+    "vite": "^8.0.16",
     "vite-plugin-dts": "^5.0.0",
     "vitest": "^4.1.7"
   },
