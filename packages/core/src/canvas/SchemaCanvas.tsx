@@ -1012,12 +1012,18 @@ function SchemaCanvasInner() {
 
   const displayNodes: Node[] = useMemo(() => {
     const selectedSet = new Set(selectedNodeIds);
-    // Use !!n.selected to normalise undefined→false; deriveGraph doesn't set `selected`
-    // on new nodes, so a plain === would create new objects for every non-selected node
-    // on each derivedNodes reset and trigger an onSelectionChange feedback loop.
-    const withSelection = storeNodes.map((n) =>
-      !!n.selected === selectedSet.has(n.id) ? n : { ...n, selected: selectedSet.has(n.id) }
-    );
+    // Build withSelection while preserving the storeNodes array reference when no
+    // node's selection state actually changed.  storeNodes.map() always produces a
+    // new array reference even when every element is returned unchanged, which would
+    // fire ReactFlow's useStoreUpdater on every render and restart the loop.
+    let needsUpdate = false;
+    const mapped = storeNodes.map((n) => {
+      const want = selectedSet.has(n.id);
+      if (!!n.selected === want) return n;
+      needsUpdate = true;
+      return { ...n, selected: want };
+    });
+    const withSelection = needsUpdate ? mapped : storeNodes;
     // Active view: hard-filter to only members (completely remove non-members)
     if (activeViewMemberIds) {
       return withSelection.filter((n) => activeViewMemberIds.has(n.id));
