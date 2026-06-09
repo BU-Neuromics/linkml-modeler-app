@@ -41,7 +41,7 @@ export function ProjectSwitcherDialog({ onClose }: ProjectSwitcherDialogProps) {
 
     setLoading(true);
     try {
-      const { project, hiddenSchemaIds, views, activeViewId, subsetLayouts } = await openProjectFromDirectory(entry.localPath, platform);
+      const { project, hiddenSchemaIds, views, activeViewId, subsetLayouts } = await openProjectFromDirectory(entry.localPath, platform, entry.schemaPath);
       if (project.schemas.length === 0) {
         pushToast({ message: `No LinkML schemas found in "${entry.repoName}"`, severity: 'warning' });
         setLoading(false);
