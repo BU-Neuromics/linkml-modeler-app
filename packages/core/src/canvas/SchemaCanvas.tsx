@@ -1011,19 +1011,24 @@ function SchemaCanvasInner() {
   }, [focusMode, activeSchemaFile]);
 
   const displayNodes: Node[] = useMemo(() => {
+    // Use derivedNodes (not storeNodes) as the source so that this memo's reference
+    // is stable between the cascade re-renders that fire after useStoreUpdater calls
+    // setStoreState.  storeNodes is updated by a useEffect that writes derivedNodes
+    // into Zustand; if displayNodes depended on storeNodes, that write would change
+    // displayNodes, fire useStoreUpdater again, trigger ReactFlow's useReactFlow()
+    // subscribers to re-render, which would update storeNodes again — an infinite loop
+    // that React 19 detects as "Maximum update depth exceeded" and aborts with an error.
+    // derivedNodes is only recomputed when effectiveLayout or schema data changes, so
+    // it stays stable across the cascade, breaking the feedback.
     const selectedSet = new Set(selectedNodeIds);
-    // Build withSelection while preserving the storeNodes array reference when no
-    // node's selection state actually changed.  storeNodes.map() always produces a
-    // new array reference even when every element is returned unchanged, which would
-    // fire ReactFlow's useStoreUpdater on every render and restart the loop.
     let needsUpdate = false;
-    const mapped = storeNodes.map((n) => {
+    const mapped = derivedNodes.map((n) => {
       const want = selectedSet.has(n.id);
       if (!!n.selected === want) return n;
       needsUpdate = true;
       return { ...n, selected: want };
     });
-    const withSelection = needsUpdate ? mapped : storeNodes;
+    const withSelection = needsUpdate ? mapped : derivedNodes;
     // Active view: hard-filter to only members (completely remove non-members)
     if (activeViewMemberIds) {
       return withSelection.filter((n) => activeViewMemberIds.has(n.id));
@@ -1047,7 +1052,7 @@ function SchemaCanvasInner() {
       }));
     }
     return withSelection;
-  }, [storeNodes, selectedNodeIds, activeViewMemberIds, visibleNodeIds, hopCloseNodeIds]);
+  }, [derivedNodes, selectedNodeIds, activeViewMemberIds, visibleNodeIds, hopCloseNodeIds]);
 
   const displayEdges = useMemo(() => {
     // Active view: only show edges where both endpoints are members.
