@@ -5,7 +5,57 @@ import type { Project, SchemaFile } from '../model/index.js';
 import { emptyCanvasLayout, emptySchema } from '../model/index.js';
 import { parseYaml } from '../io/yaml.js';
 import { resolveImports } from '../io/importResolver.js';
-import { readEditorManifest, applyManifestToSchemas, type ViewDefinition, type ViewLayout } from '../io/editorManifest.js';
+import { readEditorManifest, applyManifestToSchemas, MANIFEST_FILENAME, type ViewDefinition, type ViewLayout } from '../io/editorManifest.js';
+
+const SKIP_DIR_NAMES = new Set(['.git', 'node_modules']);
+
+function joinPath(base: string, segment: string): string {
+  if (!segment || segment === '.') return base;
+  const sep = base.includes('\\') ? '\\' : '/';
+  const trimmed = base.endsWith('/') || base.endsWith('\\') ? base.slice(0, -1) : base;
+  return `${trimmed}${sep}${segment}`;
+}
+
+function makeRelative(base: string, full: string): string {
+  if (full.startsWith(base + '/')) return full.slice(base.length + 1);
+  if (full.startsWith(base + '\\')) return full.slice(base.length + 1);
+  return full;
+}
+
+function isUnder(dir: string, filePath: string): boolean {
+  return filePath.startsWith(dir + '/') || filePath.startsWith(dir + '\\');
+}
+
+interface RecursiveScanResult {
+  yamlEntries: Array<{ path: string }>;
+  markerDirs: Array<{ dir: string; depth: number }>;
+}
+
+async function collectFilesRecursive(
+  dir: string,
+  depth: number,
+  platform: PlatformAPI,
+  result: RecursiveScanResult
+): Promise<void> {
+  let entries;
+  try {
+    entries = await platform.listDirectory(dir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory) {
+      if (SKIP_DIR_NAMES.has(entry.name)) continue;
+      await collectFilesRecursive(entry.path, depth + 1, platform, result);
+    } else {
+      if (entry.name === MANIFEST_FILENAME) {
+        result.markerDirs.push({ dir, depth });
+      } else if (/\.(ya?ml)$/i.test(entry.name)) {
+        result.yamlEntries.push({ path: entry.path });
+      }
+    }
+  }
+}
 
 /**
  * Check if a YAML string looks like a LinkML schema by testing for
@@ -19,46 +69,68 @@ export function looksLikeLinkMLSchema(content: string): boolean {
 }
 
 /**
- * Scan a directory for YAML/YML files that look like LinkML schemas,
+ * Recursively scan a directory for YAML/YML files that look like LinkML schemas,
  * parse them, and build a Project object.
+ *
+ * @param dirPath   Repo/project root — used as `project.rootPath` and manifest location.
+ * @param platform  PlatformAPI instance for file I/O.
+ * @param schemaPath  Optional sub-path to start scanning from (default `'.'`).
+ *   When set (e.g. `'schema'`), only `dirPath/schemaPath/**` is scanned for schemas.
+ *   If a `.linkml-editor.yaml` marker is found in a subdirectory during the scan,
+ *   loading is further restricted to that subtree; the marker is treated as a
+ *   "schemas live here" signal only — its contents are ignored for layout purposes.
+ *   Layout is always read from `dirPath/.linkml-editor.yaml`.
  */
 export async function openProjectFromDirectory(
   dirPath: string,
-  platform: PlatformAPI
+  platform: PlatformAPI,
+  schemaPath: string = '.'
 ): Promise<{ project: Project; hiddenSchemaIds: Set<string>; views: ViewDefinition[]; activeViewId: string | null; subsetLayouts: Record<string, ViewLayout> }> {
-  const entries = await platform.listDirectory(dirPath);
-  const yamlFiles = entries.filter(
-    (e) => !e.isDirectory && /\.(ya?ml)$/i.test(e.name)
-  );
+  const startDir = joinPath(dirPath, schemaPath);
+
+  // Collect all YAML files and manifest locations recursively, skipping .git / node_modules.
+  const scanResult: RecursiveScanResult = { yamlEntries: [], markerDirs: [] };
+  await collectFilesRecursive(startDir, 0, platform, scanResult);
+
+  // Shallowest marker wins — it signals the intended schema root within the scan tree.
+  const markerDir = scanResult.markerDirs.sort((a, b) => a.depth - b.depth)[0]?.dir ?? null;
+
+  // If a marker was found, restrict loading to files under that directory.
+  const filteredEntries = markerDir
+    ? scanResult.yamlEntries.filter((e) => isUnder(markerDir, e.path))
+    : scanResult.yamlEntries;
 
   const schemaFiles: SchemaFile[] = [];
 
-  for (const entry of yamlFiles) {
+  for (const entry of filteredEntries) {
     try {
       const content = await platform.readFile(entry.path);
       if (!looksLikeLinkMLSchema(content)) continue;
 
       const schema = parseYaml(content);
-      const relativePath = entry.name; // Top-level files — relative to rootPath
+      // filePath is relative to dirPath (the repo root) so that:
+      // - save paths (rootPath + '/' + filePath) resolve correctly
+      // - manifest keys match on re-open
+      // - sibling imports resolve via resolveImportPath (which uses the schema's own subdir)
+      const filePath = makeRelative(dirPath, entry.path);
 
       schemaFiles.push({
         id: crypto.randomUUID(),
-        filePath: relativePath,
+        filePath,
         schema,
         isDirty: false,
         canvasLayout: emptyCanvasLayout(),
       });
     } catch {
-      // Skip files that fail to parse — they may not be valid LinkML
       continue;
     }
   }
 
-  // Resolve imports (local paths + URLs) for all loaded schemas
+  // Resolve imports; rootPath=dirPath so loadSchemaFile builds dirPath+'/'+filePath.
   const importedFiles = await resolveImports(schemaFiles, platform, dirPath);
   const allSchemas = [...schemaFiles, ...importedFiles];
 
-  // Apply editor manifest (layout + visibility + views) if present
+  // Manifest is always at dirPath (the repo root), regardless of where schemas live.
   const manifest = await readEditorManifest(platform, dirPath);
   const { schemas: schemasWithLayout, hiddenSchemaIds, views, activeViewId, subsetLayouts } = manifest
     ? applyManifestToSchemas(allSchemas, manifest)
