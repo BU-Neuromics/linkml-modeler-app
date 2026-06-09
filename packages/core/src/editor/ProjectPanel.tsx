@@ -882,7 +882,10 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.4,
   },
   viewRow: {
-    padding: '5px 8px 5px 10px',
+    paddingTop: 5,
+    paddingRight: 8,
+    paddingBottom: 5,
+    paddingLeft: 10,
     cursor: 'pointer',
     borderBottom: '1px solid var(--color-bg-surface-sunken)',
     userSelect: 'none' as const,

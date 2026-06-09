@@ -287,7 +287,7 @@ export function DisplayPanel() {
             style={{ ...styles.toggleBtn, ...(hasSelection ? {} : styles.disabledBtn) }}
             disabled={!hasSelection || !adj}
             title="Select direct neighbors in both directions (n)"
-            onClick={() => runOp((s) => getDirectNeighbors(adj!, s, 'both'))}
+            onClick={() => runOp((s) => getDirectNeighbors(adj!, s, 'both'), true)}
           >
             neighbors
           </button>
@@ -296,7 +296,7 @@ export function DisplayPanel() {
             style={{ ...styles.toggleBtn, ...(hasSelection ? {} : styles.disabledBtn) }}
             disabled={!hasSelection || !adj}
             title="Select incoming neighbors"
-            onClick={() => runOp((s) => getDirectNeighbors(adj!, s, 'in'))}
+            onClick={() => runOp((s) => getDirectNeighbors(adj!, s, 'in'), true)}
           >
             ← in
           </button>
@@ -305,7 +305,7 @@ export function DisplayPanel() {
             style={{ ...styles.toggleBtn, ...(hasSelection ? {} : styles.disabledBtn) }}
             disabled={!hasSelection || !adj}
             title="Select outgoing neighbors"
-            onClick={() => runOp((s) => getDirectNeighbors(adj!, s, 'out'))}
+            onClick={() => runOp((s) => getDirectNeighbors(adj!, s, 'out'), true)}
           >
             out →
           </button>
@@ -314,7 +314,7 @@ export function DisplayPanel() {
             style={{ ...styles.toggleBtn, ...(hasSelection ? {} : styles.disabledBtn) }}
             disabled={!hasSelection || !adj}
             title="Select ancestors via is_a + mixin (a)"
-            onClick={() => runOp((s) => getAncestors(adj!, s))}
+            onClick={() => runOp((s) => getAncestors(adj!, s), true)}
           >
             ancestors
           </button>
@@ -323,7 +323,7 @@ export function DisplayPanel() {
             style={{ ...styles.toggleBtn, ...(hasSelection ? {} : styles.disabledBtn) }}
             disabled={!hasSelection || !adj}
             title="Select descendants via is_a + mixin (d)"
-            onClick={() => runOp((s) => getDescendants(adj!, s))}
+            onClick={() => runOp((s) => getDescendants(adj!, s), true)}
           >
             descendants
           </button>
@@ -341,7 +341,7 @@ export function DisplayPanel() {
             style={{ ...styles.toggleBtn, ...(hasSelection ? {} : styles.disabledBtn) }}
             disabled={!hasSelection || !adj}
             title="Select slot range targets"
-            onClick={() => runOp((s) => getRangeTargets(adj!, s))}
+            onClick={() => runOp((s) => getRangeTargets(adj!, s), true)}
           >
             range →
           </button>
@@ -350,7 +350,7 @@ export function DisplayPanel() {
             style={{ ...styles.toggleBtn, ...(hasSelection ? {} : styles.disabledBtn) }}
             disabled={!hasSelection || !adj}
             title="Select classes whose slots reference selection as range"
-            onClick={() => runOp((s) => getRangeSources(adj!, s))}
+            onClick={() => runOp((s) => getRangeSources(adj!, s), true)}
           >
             ← range
           </button>
@@ -372,7 +372,7 @@ export function DisplayPanel() {
               style={{ ...styles.toggleBtn, ...(hasSelection ? {} : styles.disabledBtn), flex: 1 }}
               disabled={!hasSelection || !adj}
               title={`Expand ${nHop}-hop neighbors`}
-              onClick={() => runOp((s) => getNHopNeighbors(adj!, s, nHop, 'both'))}
+              onClick={() => runOp((s) => getNHopNeighbors(adj!, s, nHop, 'both'), true)}
             >
               {nHop}-hop
             </button>
@@ -569,6 +569,7 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     textAlign: 'left' as const,
     width: '100%',
+    color: 'var(--color-fg-primary)',
   },
   disabledBtn: {
     opacity: 0.4,

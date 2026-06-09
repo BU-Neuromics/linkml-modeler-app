@@ -1,7 +1,7 @@
 {
   "name": "linkml-visual-editor",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.2.0",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -27,7 +27,8 @@
     "package:electron:mac": "pnpm run build:all && pnpm --filter @linkml-editor/electron package:mac",
     "package:electron:win": "pnpm run build:all && pnpm --filter @linkml-editor/electron package:win",
     "docs:dev": "pnpm --filter @linkml-editor/docs dev",
-    "docs:build": "pnpm --filter @linkml-editor/docs build"
+    "docs:build": "pnpm --filter @linkml-editor/docs build",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.0.0",

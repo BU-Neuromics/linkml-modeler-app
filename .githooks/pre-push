@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Runs before every `git push`. Catches unit + E2E failures locally so they
+# never reach CI. Playwright's webServer config auto-starts pnpm dev if needed.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+echo "▶ pre-push: running unit tests..."
+pnpm --filter @linkml-editor/core test --run
+
+echo "▶ pre-push: running E2E tests..."
+pnpm --filter @linkml-editor/web test:e2e
+
+echo "✓ pre-push checks passed"

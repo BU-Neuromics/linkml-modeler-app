@@ -303,11 +303,11 @@ function ClassRowItem({
         ...rowStyles.row,
         paddingLeft: 8 + row.depth * INDENT_PX,
         background: isSelected
-          ? 'var(--color-accent-subtle)'
+          ? 'var(--color-bg-selected)'
           : isFocused
           ? 'var(--color-bg-elevated)'
           : undefined,
-        color: isSelected ? 'var(--color-accent-fg)' : 'var(--color-fg-primary)',
+        color: 'var(--color-fg-primary)',
         outline: 'none',
       }}
       onClick={(e) => {
@@ -342,8 +342,6 @@ function ClassRowItem({
           fontStyle: row.isAbstract ? 'italic' : undefined,
           color: row.isMixinClass
             ? 'var(--color-accent-hover)'
-            : isSelected
-            ? 'var(--color-accent-fg)'
             : 'var(--color-fg-primary)',
         }}
         title={[
@@ -645,11 +643,11 @@ export function OutlineView() {
                 ...rowStyles.row,
                 paddingLeft: 8 + row.depth * INDENT_PX,
                 background: isSelected
-                  ? 'var(--color-accent-subtle)'
+                  ? 'var(--color-bg-selected)'
                   : focusedId === id
                   ? 'var(--color-bg-elevated)'
                   : undefined,
-                color: isSelected ? 'var(--color-accent-fg)' : 'var(--color-edge-union)',
+                color: isSelected ? 'var(--color-fg-primary)' : 'var(--color-edge-union)',
                 outline: 'none',
               }}
               onClick={() => selectEnum(row.name)}

@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.0] - 2026-06-09
+
+Feature release: recursive schema discovery plus selection/canvas fixes. The web build remains the primary distribution.
+
+### Added
+
+- **Recursive schema discovery**: import resolution now walks nested schema directories with `schemaPath` support, discovering imported schemas recursively (#125)
+
+### Fixed
+
+- **Selection neighborhood operations**: grow/shrink-selection ops now retain the seed node and correctly update node borders; also fixes a `displayNodes` render loop caused by the `useStoreUpdater`/`onSelectionChange` feedback cycle (#128)
+
+### Internal
+
+- **Pre-push hook**: added a `.githooks/pre-push` hook that runs unit + E2E tests before pushing (#129)
+
 ## [1.1.1] - 2026-06-02
 
 Maintenance release: CI/deploy hardening and release-process documentation. No user-facing application changes.
