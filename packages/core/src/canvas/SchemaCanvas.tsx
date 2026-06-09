@@ -1011,13 +1011,31 @@ function SchemaCanvasInner() {
   }, [focusMode, activeSchemaFile]);
 
   const displayNodes: Node[] = useMemo(() => {
+    // Use derivedNodes (not storeNodes) as the source so that this memo's reference
+    // is stable between the cascade re-renders that fire after useStoreUpdater calls
+    // setStoreState.  storeNodes is updated by a useEffect that writes derivedNodes
+    // into Zustand; if displayNodes depended on storeNodes, that write would change
+    // displayNodes, fire useStoreUpdater again, trigger ReactFlow's useReactFlow()
+    // subscribers to re-render, which would update storeNodes again — an infinite loop
+    // that React 19 detects as "Maximum update depth exceeded" and aborts with an error.
+    // derivedNodes is only recomputed when effectiveLayout or schema data changes, so
+    // it stays stable across the cascade, breaking the feedback.
+    const selectedSet = new Set(selectedNodeIds);
+    let needsUpdate = false;
+    const mapped = derivedNodes.map((n) => {
+      const want = selectedSet.has(n.id);
+      if (!!n.selected === want) return n;
+      needsUpdate = true;
+      return { ...n, selected: want };
+    });
+    const withSelection = needsUpdate ? mapped : derivedNodes;
     // Active view: hard-filter to only members (completely remove non-members)
     if (activeViewMemberIds) {
-      return storeNodes.filter((n) => activeViewMemberIds.has(n.id));
+      return withSelection.filter((n) => activeViewMemberIds.has(n.id));
     }
     // Focus mode: dim non-members (soft filter)
     if (visibleNodeIds) {
-      return storeNodes.map((n) => ({
+      return withSelection.map((n) => ({
         ...n,
         style: visibleNodeIds.has(n.id)
           ? n.style
@@ -1026,15 +1044,15 @@ function SchemaCanvasInner() {
     }
     // B3: hop-distance dimming — dim nodes beyond N hops from selection
     if (hopCloseNodeIds) {
-      return storeNodes.map((n) => ({
+      return withSelection.map((n) => ({
         ...n,
         style: hopCloseNodeIds.has(n.id)
           ? n.style
           : { ...n.style, opacity: 0.2, filter: 'grayscale(1)', transition: 'opacity 0.15s, filter 0.15s' },
       }));
     }
-    return storeNodes;
-  }, [storeNodes, activeViewMemberIds, visibleNodeIds, hopCloseNodeIds]);
+    return withSelection;
+  }, [derivedNodes, selectedNodeIds, activeViewMemberIds, visibleNodeIds, hopCloseNodeIds]);
 
   const displayEdges = useMemo(() => {
     // Active view: only show edges where both endpoints are members.
