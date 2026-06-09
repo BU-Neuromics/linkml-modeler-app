@@ -1011,13 +1011,17 @@ function SchemaCanvasInner() {
   }, [focusMode, activeSchemaFile]);
 
   const displayNodes: Node[] = useMemo(() => {
+    const selectedSet = new Set(selectedNodeIds);
+    const withSelection = storeNodes.map((n) =>
+      n.selected === selectedSet.has(n.id) ? n : { ...n, selected: selectedSet.has(n.id) }
+    );
     // Active view: hard-filter to only members (completely remove non-members)
     if (activeViewMemberIds) {
-      return storeNodes.filter((n) => activeViewMemberIds.has(n.id));
+      return withSelection.filter((n) => activeViewMemberIds.has(n.id));
     }
     // Focus mode: dim non-members (soft filter)
     if (visibleNodeIds) {
-      return storeNodes.map((n) => ({
+      return withSelection.map((n) => ({
         ...n,
         style: visibleNodeIds.has(n.id)
           ? n.style
@@ -1026,15 +1030,15 @@ function SchemaCanvasInner() {
     }
     // B3: hop-distance dimming — dim nodes beyond N hops from selection
     if (hopCloseNodeIds) {
-      return storeNodes.map((n) => ({
+      return withSelection.map((n) => ({
         ...n,
         style: hopCloseNodeIds.has(n.id)
           ? n.style
           : { ...n.style, opacity: 0.2, filter: 'grayscale(1)', transition: 'opacity 0.15s, filter 0.15s' },
       }));
     }
-    return storeNodes;
-  }, [storeNodes, activeViewMemberIds, visibleNodeIds, hopCloseNodeIds]);
+    return withSelection;
+  }, [storeNodes, selectedNodeIds, activeViewMemberIds, visibleNodeIds, hopCloseNodeIds]);
 
   const displayEdges = useMemo(() => {
     // Active view: only show edges where both endpoints are members.
