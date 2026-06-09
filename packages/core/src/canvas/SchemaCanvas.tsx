@@ -1012,8 +1012,11 @@ function SchemaCanvasInner() {
 
   const displayNodes: Node[] = useMemo(() => {
     const selectedSet = new Set(selectedNodeIds);
+    // Use !!n.selected to normalise undefined→false; deriveGraph doesn't set `selected`
+    // on new nodes, so a plain === would create new objects for every non-selected node
+    // on each derivedNodes reset and trigger an onSelectionChange feedback loop.
     const withSelection = storeNodes.map((n) =>
-      n.selected === selectedSet.has(n.id) ? n : { ...n, selected: selectedSet.has(n.id) }
+      !!n.selected === selectedSet.has(n.id) ? n : { ...n, selected: selectedSet.has(n.id) }
     );
     // Active view: hard-filter to only members (completely remove non-members)
     if (activeViewMemberIds) {

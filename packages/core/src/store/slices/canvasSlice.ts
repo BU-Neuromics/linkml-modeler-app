@@ -33,7 +33,7 @@ export type FocusMode =
   | { type: 'subset'; subsetName: string }
   | { type: 'selection'; nodeIds: string[] };
 
-export const createCanvasSlice: StateCreator<CanvasSlice, [], [], CanvasSlice> = (set) => ({
+export const createCanvasSlice: StateCreator<CanvasSlice, [], [], CanvasSlice> = (set, get) => ({
   nodes: [],
   edges: [],
   viewport: { x: 0, y: 0, zoom: 1 },
@@ -63,6 +63,17 @@ export const createCanvasSlice: StateCreator<CanvasSlice, [], [], CanvasSlice> =
   },
 
   setSelection(nodeIds, edgeIds) {
+    // Skip the update when content is unchanged — prevents an onSelectionChange
+    // feedback loop where displayNodes passes selected=true to ReactFlow, ReactFlow
+    // fires onSelectionChange back, and setSelection creates a new array reference
+    // that Zustand treats as a change, triggering another render cycle.
+    const cur = get();
+    if (
+      nodeIds.length === cur.selectedNodeIds.length &&
+      edgeIds.length === cur.selectedEdgeIds.length &&
+      nodeIds.every((id, i) => id === cur.selectedNodeIds[i]) &&
+      edgeIds.every((id, i) => id === cur.selectedEdgeIds[i])
+    ) return;
     set({ selectedNodeIds: nodeIds, selectedEdgeIds: edgeIds });
   },
 
