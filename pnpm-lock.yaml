@@ -156,8 +156,8 @@ importers:
   packages/proxy:
     dependencies:
       '@isomorphic-git/cors-proxy':
-        specifier: ^3.0.1
-        version: 3.0.1
+        specifier: ^3.0.2
+        version: 3.0.2
 
   packages/web:
     dependencies:
@@ -750,8 +750,8 @@ packages:
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
     engines: {node: '>=18.0.0'}
 
-  '@isomorphic-git/cors-proxy@3.0.1':
-    resolution: {integrity: sha512-pFVLH7Hu+EX51FI3uBTZbkmLT2RwWA0ieGd3AwEemj6L4CUkfGEWXKiictgNIpambHw3faQ5MZegrUTIEfIQzA==}
+  '@isomorphic-git/cors-proxy@3.0.2':
+    resolution: {integrity: sha512-/gxYl1bdyTLKkycRDYH8nzx5Uz6y5Hjb7eLshGdW++qG4lIn7riZ3QLfVQCVgObpfmAgvqWuxrjxXyWsIOtrJA==}
     hasBin: true
 
   '@isomorphic-git/idb-keyval@3.3.2':
@@ -3941,6 +3941,11 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  semver@7.8.5:
+    resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
+    engines: {node: '>=10'}
+    hasBin: true
+
   serialize-error@7.0.1:
     resolution: {integrity: sha512-8I8TjW5KMOKsZQTvoxjuSIa7foAwPWGOts+6o7sgjz41/qMD9VQHEDxi6PBvK2l0MXUmqZyNpUK+T2tQaaElvw==}
     engines: {node: '>=10'}
@@ -5362,7 +5367,7 @@ snapshots:
     dependencies:
       minipass: 7.1.3
 
-  '@isomorphic-git/cors-proxy@3.0.1': {}
+  '@isomorphic-git/cors-proxy@3.0.2': {}
 
   '@isomorphic-git/idb-keyval@3.3.2': {}
 
@@ -9117,6 +9122,8 @@ snapshots:
   semver@7.7.4: {}
 
   semver@7.8.1: {}
+
+  semver@7.8.5: {}
 
   semver@7.8.5: {}
 
