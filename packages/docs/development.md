@@ -76,49 +76,32 @@ The `packages/web/dist/` directory is a self-contained static site — deploy it
 
 ### Deploying the web build with Docker
 
-A Docker Compose stack (nginx + CORS proxy) is provided under `deploy/web/`.
+A Docker Compose stack (nginx + CORS proxy) is provided under `deploy/web/`. The web image is **self-contained** — a multi-stage build compiles the app inside Docker (pnpm build stage → nginx serve stage), so no host-side `pnpm build` is needed:
 
 ```bash
-# Build the web package (root path, default)
-VITE_GIT_CORS_PROXY=https://your-domain.com/cors-proxy \
-  pnpm --filter @linkml-editor/web build
-
-# Start the stack
 docker compose -f deploy/web/docker-compose.yml up --build
 ```
 
-The app is served on port 80. The CORS proxy is reachable at `/cors-proxy/` on the same origin.
+The app is served on port 80. The CORS proxy is reachable at `/cors-proxy/` on the same origin, and is baked into the bundle as the default `VITE_GIT_CORS_PROXY`.
 
 ### Serving behind a reverse proxy at a subpath
 
-When your reverse proxy routes the app under a URL prefix (e.g. `https://your-domain.com/linkml-editor/`), two values must agree: the Vite asset base and the nginx location prefix. Both are controlled at **build time**.
-
-**Step 1 — build the web package with `VITE_BASE_URL` set:**
-
-```bash
-VITE_BASE_URL=/linkml-editor/ \
-VITE_GIT_CORS_PROXY=https://your-domain.com/linkml-editor/cors-proxy \
-  pnpm --filter @linkml-editor/web build
-```
-
-`VITE_BASE_URL` must end with `/`. It controls the `<script>` and `<link>` src attributes emitted in `index.html` so browsers fetch assets from the right path.
-
-**Step 2 — build and start Docker with `BASE_PATH` set to the same value:**
+When your reverse proxy routes the app under a URL prefix (e.g. `https://your-domain.com/linkml-editor/`), set `BASE_PATH`. It is a single build arg that feeds **both** the Vite asset base (`VITE_BASE_URL`) and the nginx location prefix, so the two can no longer disagree:
 
 ```bash
 BASE_PATH=/linkml-editor/ \
   docker compose -f deploy/web/docker-compose.yml up --build
 ```
 
-`BASE_PATH` is passed as a Docker build arg and written into the nginx config. It must match `VITE_BASE_URL` exactly.
+`BASE_PATH` must end with `/`.
 
-**Configuration summary:**
+**Configuration summary** (all Docker build args — Vite config is compile-time, so changing any of these requires an image rebuild):
 
-| Variable | Where used | Example |
-|---|---|---|
-| `VITE_BASE_URL` | `pnpm build` env (baked into `index.html`) | `/linkml-editor/` |
-| `VITE_GIT_CORS_PROXY` | `pnpm build` env (baked into JS bundle) | `https://your-domain.com/linkml-editor/cors-proxy` |
-| `BASE_PATH` | `docker compose` env → Docker build arg → nginx config | `/linkml-editor/` |
+| Build arg | Feeds | Default | Example |
+|---|---|---|---|
+| `BASE_PATH` | `VITE_BASE_URL` (asset base in `index.html`) + nginx location prefix | `/` | `/linkml-editor/` |
+| `GIT_CORS_PROXY` | `VITE_GIT_CORS_PROXY` (baked into JS bundle); relative paths resolve same-origin | `${BASE_PATH}cors-proxy` (compose) / empty = remote git disabled (bare `docker build`) | `/linkml-editor/cors-proxy` |
+| `GITHUB_CLIENT_ID` | `VITE_GITHUB_CLIENT_ID` (GitHub device-flow sign-in; empty hides the sign-in UI) | empty | `Iv1.abc123` |
 
 **Reverse proxy config (example nginx upstream):**
 
