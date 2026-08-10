@@ -134,8 +134,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       isomorphic-git:
-        specifier: ^1.38.1
-        version: 1.38.1
+        specifier: ^1.40.0
+        version: 1.41.2
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.1.9
@@ -144,7 +144,7 @@ importers:
         specifier: ^42.2.0
         version: 42.2.0
       electron-builder:
-        specifier: ^26.15.3
+        specifier: ^26.8.1
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
       typescript:
         specifier: ^6.0.3
@@ -171,8 +171,8 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       isomorphic-git:
-        specifier: ^1.38.1
-        version: 1.38.1
+        specifier: ^1.40.0
+        version: 1.41.2
       lucide-react:
         specifier: ^1.17.0
         version: 1.17.0(react@19.2.7)
@@ -2793,8 +2793,8 @@ packages:
     resolution: {integrity: sha512-FFUtZMpoZ8RqHS3XeXEmHWLA4thH+ZxCv2lOiPIn1Xc7CxrqhWzNSDzD+/chS/zbYezmiwWLdQC09JdQKmthOw==}
     engines: {node: '>=20'}
 
-  isomorphic-git@1.38.1:
-    resolution: {integrity: sha512-Vd2u5qDLa04fA/h5nUMU5UuffPXqg+3D3bJIV3n7Sno2qS3XMinUXRvNHrGPVy2kkC1ad5SPCC3WcpXjn0L9oQ==}
+  isomorphic-git@1.41.2:
+    resolution: {integrity: sha512-DS4+KaSsBBHuNMh1RgKcDjnEUKa7NJsGteXo79QZTivg1rhq7hZy18NXzsWfGDy3/4vL4k8fnR/wL8nnZlLC4w==}
     engines: {node: '>=14.17'}
     hasBin: true
 
@@ -7364,7 +7364,7 @@ snapshots:
 
   isexe@4.0.0: {}
 
-  isomorphic-git@1.38.1:
+  isomorphic-git@1.41.2:
     dependencies:
       async-lock: 1.4.1
       clean-git-ref: 2.0.1
