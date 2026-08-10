@@ -24,12 +24,12 @@
   },
   "dependencies": {
     "@linkml-editor/core": "workspace:*",
-    "isomorphic-git": "^1.38.1"
+    "isomorphic-git": "^1.40.0"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.9",
     "electron": "^42.2.0",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^26.8.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
   },
