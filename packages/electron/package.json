@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@linkml-editor/core": "workspace:*",
-    "isomorphic-git": "^1.38.1"
+    "isomorphic-git": "^1.40.0"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.9",
