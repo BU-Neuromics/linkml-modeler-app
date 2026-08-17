@@ -16,7 +16,7 @@
     "buffer": "^6.0.3",
     "isomorphic-git": "^1.40.0",
     "lucide-react": "^1.17.0",
-    "react": "^19.2.7",
+    "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "reactflow": "^11.11.0"
   },
