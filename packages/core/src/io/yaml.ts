@@ -315,6 +315,11 @@ function normalizePrefixes(raw: unknown): Record<string, string> {
 }
 
 export function parseYaml(rawYaml: string): LinkMLSchema {
+  // js-yaml v5 throws on empty/whitespace-only input instead of returning
+  // undefined; short-circuit so callers get our clear error message.
+  if (!rawYaml.trim()) {
+    throw new Error('Invalid YAML: expected a mapping object');
+  }
   const raw = jsyaml.load(rawYaml) as Record<string, unknown>;
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new Error('Invalid YAML: expected a mapping object');
