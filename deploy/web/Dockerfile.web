@@ -1,21 +1,59 @@
-# Serves the pre-built web app via nginx.
+# Self-contained web build: pnpm build stage -> nginx serve stage.
+# No host-side build required — `docker compose up --build` works from a
+# clean checkout (issue #149).
 #
-# Build args:
-#   BASE_PATH  — URL path prefix the app is served under (default: /).
-#                Must match the VITE_BASE_URL used when building the web package.
-#                Example: /linkml-editor/
+# Build args (all baked at build time — Vite config is compile-time):
+#   BASE_PATH         — URL path prefix the app is served under (default: /).
+#                       Must end with '/'. Single source of truth: used as
+#                       VITE_BASE_URL for the Vite build AND substituted into
+#                       nginx.conf, so the two can no longer drift apart.
+#                       Example: /linkml-editor/
+#   GIT_CORS_PROXY    — VITE_GIT_CORS_PROXY: CORS proxy URL for isomorphic-git
+#                       remote operations. May be absolute or a same-origin
+#                       path (e.g. /cors-proxy). Empty (default) disables
+#                       remote git; local editing still works. See SECURITY.md.
+#   GITHUB_CLIENT_ID  — VITE_GITHUB_CLIENT_ID: GitHub OAuth device-flow client
+#                       id. Empty (default) hides the sign-in UI.
 #
-# Build the web package first:
-#   VITE_BASE_URL=/linkml-editor/ \
-#   VITE_GIT_CORS_PROXY=https://your-domain.com/linkml-editor/cors-proxy \
-#     pnpm --filter @linkml-editor/web build
-#
-# Then run from the repo root:
-#   BASE_PATH=/linkml-editor/ docker compose -f deploy/web/docker-compose.yml up --build
+# Run from the repo root:
+#   BASE_PATH=/linkml-editor/ GIT_CORS_PROXY=/linkml-editor/cors-proxy \
+#     docker compose -f deploy/web/docker-compose.yml up --build
+
+FROM node:20-alpine AS build
+
+# No packageManager field in package.json yet, so pin pnpm explicitly
+# (matches CI's pnpm 10).
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+
+WORKDIR /src
+
+# Manifests first so the dependency-install layer caches across source edits.
+# All workspace manifests must be present for the lockfile to validate, but
+# the filtered install below only downloads deps for web and its workspace
+# dependencies (notably skipping the Electron binary).
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/core/package.json packages/core/
+COPY packages/web/package.json packages/web/
+COPY packages/electron/package.json packages/electron/
+COPY packages/docs/package.json packages/docs/
+COPY packages/proxy/package.json packages/proxy/
+RUN pnpm install --frozen-lockfile --filter @linkml-editor/web...
+
+COPY packages/core packages/core
+COPY packages/web packages/web
+
+ARG BASE_PATH=/
+ARG GIT_CORS_PROXY=
+ARG GITHUB_CLIENT_ID=
+RUN pnpm --filter @linkml-editor/core build \
+    && VITE_BASE_URL="${BASE_PATH}" \
+       VITE_GIT_CORS_PROXY="${GIT_CORS_PROXY}" \
+       VITE_GITHUB_CLIENT_ID="${GITHUB_CLIENT_ID}" \
+       pnpm --filter @linkml-editor/web build
 
 FROM nginx:alpine
 ARG BASE_PATH=/
-COPY packages/web/dist /usr/share/nginx/html
+COPY --from=build /src/packages/web/dist /usr/share/nginx/html
 COPY deploy/web/nginx.conf /etc/nginx/conf.d/default.conf
 # Substitute __BASE_PATH__ placeholder; use | as delimiter to handle / safely
 RUN sed -i "s|__BASE_PATH__|${BASE_PATH}|g" /etc/nginx/conf.d/default.conf
