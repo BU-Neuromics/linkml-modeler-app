@@ -5,7 +5,7 @@
  * default open schema, and editor preferences. It lives at the project root
  * as `.linkml-editor.yaml`.
  */
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import type { EditorManifest } from '../model/index.js';
 
 export const MANIFEST_FILENAME = '.linkml-editor.yaml';
