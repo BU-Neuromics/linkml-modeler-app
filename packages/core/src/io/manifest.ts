@@ -11,6 +11,10 @@ import type { EditorManifest } from '../model/index.js';
 export const MANIFEST_FILENAME = '.linkml-editor.yaml';
 
 export function parseManifest(raw: string): EditorManifest {
+  // js-yaml v5 throws "expected a document, but the input is empty" on empty or
+  // whitespace-only input, whereas v4 returned undefined. Guard so an empty
+  // manifest still yields defaults rather than an exception.
+  if (!raw.trim()) return {};
   const obj = yaml.load(raw) as Record<string, unknown> | null;
   if (!obj || typeof obj !== 'object') return {};
 
