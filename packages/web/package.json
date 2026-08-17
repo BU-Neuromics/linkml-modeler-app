@@ -11,7 +11,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@isomorphic-git/lightning-fs": "^4.6.2",
+    "@isomorphic-git/lightning-fs": "^4.7.0",
     "@linkml-editor/core": "workspace:*",
     "buffer": "^6.0.3",
     "isomorphic-git": "^1.40.0",
