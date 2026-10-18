@@ -17,7 +17,7 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 ### Clone and install
 
 ```bash
-git clone https://github.com/adamlabadorf/linkml-modeler-app.git
+git clone https://github.com/datahelix-platform/linkml-modeler-app.git
 cd linkml-modeler-app
 pnpm install
 ```
@@ -86,8 +86,8 @@ PRs should be focused — one logical change per PR. Large refactors should be d
 
 Use the GitHub issue tracker with the appropriate template:
 
-- [Bug report](https://github.com/adamlabadorf/linkml-modeler-app/issues/new?template=bug_report.md)
-- [Feature request](https://github.com/adamlabadorf/linkml-modeler-app/issues/new?template=feature_request.md)
+- [Bug report](https://github.com/datahelix-platform/linkml-modeler-app/issues/new?template=bug_report.md)
+- [Feature request](https://github.com/datahelix-platform/linkml-modeler-app/issues/new?template=feature_request.md)
 
 For security vulnerabilities, see [SECURITY.md](SECURITY.md).
 
