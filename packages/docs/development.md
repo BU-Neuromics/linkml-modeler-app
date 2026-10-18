@@ -15,7 +15,7 @@
 ## Setup
 
 ```bash
-git clone https://github.com/adamlabadorf/linkml-modeler-app.git
+git clone https://github.com/datahelix-platform/linkml-modeler-app.git
 cd linkml-modeler-app
 pnpm install
 ```

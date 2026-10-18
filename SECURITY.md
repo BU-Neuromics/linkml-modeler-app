@@ -154,4 +154,4 @@ For sensitive reports, email the maintainer directly at **labadorf@bu.edu** with
 
 You can expect an acknowledgement within 3 business days. We will work with you on a coordinated disclosure timeline before any public announcement.
 
-For non-sensitive reports (e.g., documentation gaps, low-severity hardening suggestions), opening a [GitHub issue](https://github.com/adamlabadorf/linkml-modeler-app/issues) with the `security` label is fine.
+For non-sensitive reports (e.g., documentation gaps, low-severity hardening suggestions), opening a [GitHub issue](https://github.com/datahelix-platform/linkml-modeler-app/issues) with the `security` label is fine.
