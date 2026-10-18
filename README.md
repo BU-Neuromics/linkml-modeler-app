@@ -171,6 +171,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, development workf
 
 ---
 
+## Acknowledgments
+
+The LinkML Modeler App is developed by Adam Labadorf with the National Center for PTSD Brain Bank, U.S. Department of Veterans Affairs.
+
 ## License
 
 [MIT](LICENSE)
