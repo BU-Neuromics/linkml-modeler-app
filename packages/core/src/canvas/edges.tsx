@@ -178,6 +178,8 @@ export interface RangeEdgeData extends ElkRouteData {
   required: boolean;
   multivalued: boolean;
   identifier: boolean;
+  /** True when this range edge represents a slot_usage range override on an inherited slot. */
+  isUsageOverride?: boolean;
   /** Set by SchemaCanvas when this edge should be visually dimmed for highlight mode. */
   dimmed?: boolean;
 }
@@ -189,6 +191,7 @@ export const RangeEdge = memo(function RangeEdge(props: EdgeProps) {
   const [hovered, setHovered] = useState(false);
   const data = props.data as RangeEdgeData | undefined;
   const dimmed = data?.dimmed ?? false;
+  const isUsageOverride = data?.isUsageOverride ?? false;
 
   const badges: string[] = [];
   if (data?.required) badges.push('R');
@@ -213,6 +216,7 @@ export const RangeEdge = memo(function RangeEdge(props: EdgeProps) {
         style={{
           stroke: 'var(--color-state-success)',
           strokeWidth: hovered ? 2.5 : 1.5,
+          strokeDasharray: isUsageOverride ? '5 3' : undefined,
           filter: hovered ? 'drop-shadow(0 0 4px rgba(74, 222, 128, 0.5))' : undefined,
           transition: 'stroke-width 0.15s, filter 0.15s',
         }}
@@ -248,6 +252,24 @@ export const RangeEdge = memo(function RangeEdge(props: EdgeProps) {
               }}
             >
               {props.label as string}
+            </span>
+          )}
+          {/* slot_usage override badge */}
+          {isUsageOverride && (
+            <span
+              style={{
+                fontSize: 9,
+                background: 'var(--color-bg-surface)',
+                border: '1px solid var(--color-state-warning)',
+                borderRadius: 3,
+                padding: '0 3px',
+                color: 'var(--color-state-warning)',
+                fontFamily: 'var(--font-family-mono)',
+                fontWeight: 600,
+              }}
+              title="slot_usage range override"
+            >
+              ~
             </span>
           )}
           {/* Property badges */}

@@ -202,7 +202,8 @@ function ClassNode({ data, selected }: NodeProps<ClassNodeData>) {
           Added for each own (non-inherited) slot that declares a range.
           Both east and west handles exist; deriveGraph picks the side facing the target. */}
       {!collapsed && visibleSlots.map((r, i) => {
-        if (r.inherited || !r.slot.range) return null;
+        if (r.inherited && !r.hasUsageOverride) return null;
+        if (!r.slot.range) return null;
         if (showInlineRange && r.rangeIsEntity) return null; // handle suppressed when rendered inline
         const y = classSlotMidY(i, hasIsA);
         return (

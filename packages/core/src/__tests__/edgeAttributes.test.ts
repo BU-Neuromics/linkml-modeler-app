@@ -536,3 +536,97 @@ classes:
     expect(bookData.rangeEdgesMode).toBe('inline');
   });
 });
+
+// ── 8. Inherited slot_usage range overrides ───────────────────────────────────
+// Repro from GH #133: Employee.affiliation overrides range to Organization via slot_usage.
+// Contractor inherits a slot (supervisor) whose schema-level range IS an entity, but
+// does not override it — no range edge should be emitted for that slot on Contractor.
+const INHERITED_RANGE_OVERRIDE_YAML = `
+id: https://example.org/inheritedrange
+name: inheritedrange
+prefixes:
+  linkml: https://w3id.org/linkml/
+default_prefix: inheritedrange
+imports:
+  - linkml:types
+classes:
+  Organization:
+    attributes:
+      name:
+        range: string
+  Person:
+    slots:
+      - affiliation
+      - supervisor
+  Employee:
+    is_a: Person
+    slot_usage:
+      affiliation:
+        range: Organization
+  Manager:
+    is_a: Person
+  Contractor:
+    is_a: Person
+slots:
+  affiliation:
+    range: string
+  supervisor:
+    range: Person
+`.trim();
+
+describe('Inherited slot_usage range overrides (GH #133)', () => {
+  it('resolvedSlots shows the overridden range on the Employee node', () => {
+    const schema = parseYaml(INHERITED_RANGE_OVERRIDE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {});
+    const empNode = graph.nodes.find((n) => n.id === 'Employee');
+    const empData = empNode?.data as import('../canvas/ClassNode.js').ClassNodeData;
+    const affSlot = empData.resolvedSlots?.find((r) => r.slot.name === 'affiliation');
+    expect(affSlot).toBeDefined();
+    expect(affSlot!.slot.range).toBe('Organization');
+  });
+
+  it('hasUsageOverride is true on the overridden inherited slot', () => {
+    const schema = parseYaml(INHERITED_RANGE_OVERRIDE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {});
+    const empNode = graph.nodes.find((n) => n.id === 'Employee');
+    const empData = empNode?.data as import('../canvas/ClassNode.js').ClassNodeData;
+    const affSlot = empData.resolvedSlots?.find((r) => r.slot.name === 'affiliation');
+    expect(affSlot?.hasUsageOverride).toBe(true);
+  });
+
+  it('emits a range edge Employee → Organization for the overridden inherited slot', () => {
+    const schema = parseYaml(INHERITED_RANGE_OVERRIDE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {});
+    const overrideEdge = graph.edges.find((e) => e.id === 'range__Employee__affiliation__Organization');
+    expect(overrideEdge).toBeDefined();
+    expect(overrideEdge!.source).toBe('Employee');
+    expect(overrideEdge!.target).toBe('Organization');
+  });
+
+  it('range edge is flagged as isUsageOverride', () => {
+    const schema = parseYaml(INHERITED_RANGE_OVERRIDE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {});
+    const overrideEdge = graph.edges.find((e) => e.id === 'range__Employee__affiliation__Organization');
+    expect(overrideEdge?.data?.isUsageOverride).toBe(true);
+  });
+
+  it('no range edge is emitted for Manager which inherits affiliation without any override', () => {
+    const schema = parseYaml(INHERITED_RANGE_OVERRIDE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {});
+    const managerRangeEdges = graph.edges.filter(
+      (e) => e.type === 'range' && e.source === 'Manager',
+    );
+    expect(managerRangeEdges).toHaveLength(0);
+  });
+
+  it('no range edge is emitted for Contractor which inherits supervisor (entity range) without override', () => {
+    // supervisor has range: Person (an entity), but Contractor has no slot_usage override.
+    // This locks the `if (!usage?.range) continue` guard in the inherited-range-override pass.
+    const schema = parseYaml(INHERITED_RANGE_OVERRIDE_YAML);
+    const graph = deriveGraph(schema, emptyCanvasLayout(), {});
+    const contractorRangeEdges = graph.edges.filter(
+      (e) => e.type === 'range' && e.source === 'Contractor',
+    );
+    expect(contractorRangeEdges).toHaveLength(0);
+  });
+});

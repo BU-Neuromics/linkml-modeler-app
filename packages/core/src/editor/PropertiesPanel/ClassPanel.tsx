@@ -24,7 +24,7 @@ function collectInheritedSlotNames(
   const cls = schema.classes[className];
   if (!cls) return [];
 
-  const names: string[] = [...cls.slots];
+  const names: string[] = [...cls.slots, ...Object.keys(cls.attributes)];
   if (cls.isA) names.push(...collectInheritedSlotNames(cls.isA, schema, visited));
   for (const mixin of cls.mixins) names.push(...collectInheritedSlotNames(mixin, schema, visited));
   return [...new Set(names)];
@@ -71,10 +71,12 @@ export function ClassPanel({ schemaId, className }: { schemaId: string; classNam
     () => schema ? collectInheritedSlotNames(className, schema, new Set()) : [],
     [schema, className]
   );
-  // Slot names that are eligible to add as slot_usage (inherited but not yet overridden)
+  // Slot names that are eligible to add as slot_usage (inherited but not yet overridden or own attr)
   const availableForUsage = useMemo(
-    () => inheritedSlotNames.filter((n) => !(n in (classDef?.slotUsage ?? {}))),
-    [inheritedSlotNames, classDef?.slotUsage]
+    () => inheritedSlotNames.filter(
+      (n) => !(n in (classDef?.slotUsage ?? {})) && !(n in (classDef?.attributes ?? {}))
+    ),
+    [inheritedSlotNames, classDef?.slotUsage, classDef?.attributes]
   );
 
   if (!classDef) return <EmptyPanel message="Class not found" />;

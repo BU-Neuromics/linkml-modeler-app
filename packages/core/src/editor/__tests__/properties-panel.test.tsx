@@ -632,6 +632,64 @@ describe('PropertiesPanel class with is_a renders inheritance section', () => {
   });
 });
 
+// ── slot_usage candidate inheritance (GitHub #131) ───────────────────────────
+
+import { ClassPanel } from '../PropertiesPanel/ClassPanel.js';
+
+describe('ClassPanel slot_usage candidates include inherited inline attributes', () => {
+  it('parent inline attribute appears as slot_usage candidate in child', () => {
+    const sf = makeSchemaFile('core');
+    sf.schema.classes['Parent'] = {
+      ...emptyClassDefinition('Parent'),
+      attributes: { name: emptySlotDefinition('name') },
+    };
+    sf.schema.classes['Child'] = {
+      ...emptyClassDefinition('Child'),
+      isA: 'Parent',
+    };
+    useAppStore.getState().setProject(makeProject('test', [sf]));
+    useAppStore.setState({ activeSchemaId: sf.id });
+
+    render(<ClassPanel schemaId={sf.id} className="Child" />);
+
+    // The slot_usage dropdown should exist (rendered only when there are candidates)
+    const input = screen.getByPlaceholderText('add slot_usage override…');
+    expect(input).toBeInTheDocument();
+
+    // Open the dropdown and verify "name" appears as a candidate
+    fireEvent.focus(input);
+    const wrapper = input.closest('[tabindex="-1"]')!;
+    expect(within(wrapper as HTMLElement).getByText('name')).toBeInTheDocument();
+  });
+
+  it("child's own attributes are NOT offered as slot_usage candidates", () => {
+    const sf = makeSchemaFile('core');
+    sf.schema.classes['Parent'] = {
+      ...emptyClassDefinition('Parent'),
+      attributes: { name: emptySlotDefinition('name') },
+    };
+    sf.schema.classes['Child'] = {
+      ...emptyClassDefinition('Child'),
+      isA: 'Parent',
+      attributes: { age: emptySlotDefinition('age') },
+    };
+    useAppStore.getState().setProject(makeProject('test', [sf]));
+    useAppStore.setState({ activeSchemaId: sf.id });
+
+    render(<ClassPanel schemaId={sf.id} className="Child" />);
+
+    // "name" is inherited → dropdown should exist
+    const input = screen.getByPlaceholderText('add slot_usage override…');
+    fireEvent.focus(input);
+    const wrapper = input.closest('[tabindex="-1"]')!;
+
+    // "name" (inherited from Parent) must be present
+    expect(within(wrapper as HTMLElement).getByText('name')).toBeInTheDocument();
+    // "age" (Child's own attribute) must NOT be in the dropdown
+    expect(within(wrapper as HTMLElement).queryByText('age')).not.toBeInTheDocument();
+  });
+});
+
 // ── DeleteButton confirmation flow ────────────────────────────────────────────
 
 import { DeleteButton } from '../PropertiesPanel/internal.js';

@@ -1,0 +1,76 @@
+name: Dependabot Lockfile Fixup
+
+# When Dependabot bumps an npm dependency it regenerates pnpm-lock.yaml with its
+# own bundled pnpm, which drops the top-level `overrides:` block that lives in
+# package.json (added in #98 for transitive-dep security remediation). The
+# resulting mismatch makes every downstream `pnpm install --frozen-lockfile`
+# abort with ERR_PNPM_LOCKFILE_CONFIG_MISMATCH, blocking the whole npm Dependabot
+# queue (see #164). This job regenerates the lockfile so it carries the overrides
+# again and pushes the corrected lockfile back onto the Dependabot PR branch.
+#
+# Security notes (reviewer, please read):
+#   * We use `pull_request_target` so the run executes in the base-repo context
+#     with a writable GITHUB_TOKEN — Dependabot branches live in this repo (not a
+#     fork), so the token can push to them. The job is gated on the Dependabot
+#     actor so it never runs for arbitrary contributor PRs.
+#   * We regenerate with `--lockfile-only --ignore-scripts`: no dependency
+#     lifecycle scripts from the PR are ever executed, only the dependency graph
+#     is re-resolved. This removes the usual `pull_request_target` code-execution
+#     risk while still writing the overrides back into the lockfile.
+#
+# Known limitation: commits pushed with the default GITHUB_TOKEN do not trigger a
+# fresh workflow run (GitHub's loop-prevention). After this job pushes the fixup,
+# re-run CI on the PR by closing/reopening it or with `@dependabot recreate` once
+# the lockfile is correct. A follow-up could swap in a PAT to auto-retrigger.
+
+on:
+  pull_request_target:
+    paths:
+      - 'package.json'
+      - 'packages/*/package.json'
+      - 'pnpm-lock.yaml'
+
+permissions:
+  contents: write
+
+jobs:
+  fixup:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10
+          run_install: false
+
+      - name: Regenerate lockfile preserving overrides
+        run: pnpm install --no-frozen-lockfile --lockfile-only --ignore-scripts
+
+      - name: Commit and push corrected lockfile if changed
+        run: |
+          if git diff --quiet -- pnpm-lock.yaml; then
+            echo "Lockfile already carries the overrides; nothing to fix."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          git commit -m "chore(deps): restore pnpm overrides in lockfile
+
+Regenerated pnpm-lock.yaml so it carries the package.json overrides block
+that Dependabot's lockfile regeneration drops. Refs #164."
+          git push

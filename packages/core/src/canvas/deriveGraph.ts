@@ -176,10 +176,19 @@ export function deriveGraph(
     }
 
     // Add inherited slots (from is_a ancestors and mixins) that aren't overridden locally
-    for (const [name, resolved] of gatherAncestorSlots(className, schema, allSchemaSlots)) {
+    const ancestorSlots = gatherAncestorSlots(className, schema, allSchemaSlots);
+    for (const [name, resolved] of ancestorSlots) {
       if (!ownSlotNames.has(name)) {
-        const rangeIsEntity = !!resolved.slot.range && (resolved.slot.range in schema.classes || resolved.slot.range in schema.enums);
-        resolvedSlots.push({ ...resolved, rangeIsEntity });
+        const usage = classDef.slotUsage[name];
+        if (usage) {
+          const effectiveSlot = { ...resolved.slot, ...usage, name };
+          const effectiveRange = effectiveSlot.range;
+          const rangeIsEntity = !!effectiveRange && (effectiveRange in schema.classes || effectiveRange in schema.enums);
+          resolvedSlots.push({ ...resolved, slot: effectiveSlot, hasUsageOverride: true, rangeIsEntity });
+        } else {
+          const rangeIsEntity = !!resolved.slot.range && (resolved.slot.range in schema.classes || resolved.slot.range in schema.enums);
+          resolvedSlots.push({ ...resolved, rangeIsEntity });
+        }
       }
     }
 
@@ -309,6 +318,44 @@ export function deriveGraph(
               required: effectiveSlot.required ?? false,
               multivalued: effectiveSlot.multivalued ?? false,
               identifier: effectiveSlot.identifier ?? false,
+            },
+            animated: false,
+          });
+        }
+      }
+
+      // ── range edges (inherited slots with slot_usage range overrides) ─────
+      // Only emit an edge when the current class's slot_usage explicitly sets range,
+      // and the overridden range resolves to a class or enum. Plain inherited slots
+      // (no range override) are intentionally excluded — their range is already
+      // reachable via the is_a edge to the ancestor that owns them.
+      for (const [slotName, resolved] of ancestorSlots) {
+        if (ownSlotNames.has(slotName)) continue;
+        const usage = classDef.slotUsage[slotName];
+        if (!usage?.range) continue;
+        const effectiveRange = usage.range;
+        if (effectiveRange === className) continue;
+        const edgeId = `range__${className}__${slotName}__${effectiveRange}`;
+        if (edges.find((e) => e.id === edgeId)) continue;
+        const rangeIsClass = effectiveRange in schema.classes;
+        const rangeIsEnum = effectiveRange in schema.enums;
+        if (rangeIsClass || rangeIsEnum) {
+          const effectiveSlot = { ...resolved.slot, ...usage };
+          const handles = rangeHandles(layout, className, effectiveRange, slotName, isCollapsed);
+          edges.push({
+            id: edgeId,
+            type: 'range' as LinkMLEdgeType,
+            source: className,
+            target: effectiveRange,
+            label: slotName,
+            ...handles,
+            data: {
+              slotName,
+              range: effectiveRange,
+              required: effectiveSlot.required ?? false,
+              multivalued: effectiveSlot.multivalued ?? false,
+              identifier: effectiveSlot.identifier ?? false,
+              isUsageOverride: true,
             },
             animated: false,
           });

@@ -1,25 +1,20 @@
 # Web deployment: nginx serving the Vite build + isomorphic-git CORS proxy.
 #
-# Pre-requisite: build the web app with the proxy URL and base path baked in:
+# The web image is self-contained (multi-stage: pnpm build -> nginx), so no
+# host-side build is required — this works from a clean checkout:
 #
-#   VITE_BASE_URL=/ \
-#   VITE_GIT_CORS_PROXY=https://your-domain.com/cors-proxy \
-#     pnpm --filter @linkml-editor/web build
-#
-# To serve under a subpath (e.g. /linkml-editor/) set BASE_PATH and
-# VITE_BASE_URL to the same value at build time:
-#
-#   VITE_BASE_URL=/linkml-editor/ \
-#   VITE_GIT_CORS_PROXY=https://your-domain.com/linkml-editor/cors-proxy \
-#     pnpm --filter @linkml-editor/web build
-#
-#   BASE_PATH=/linkml-editor/ docker compose -f deploy/web/docker-compose.yml up --build
-#
-# For local testing use http://localhost/cors-proxy (nginx proxies it) or
-# point directly at the proxy port: http://localhost:9999
-#
-# Run from the repo root:
 #   docker compose -f deploy/web/docker-compose.yml up --build
+#
+# To serve under a subpath (e.g. /linkml-editor/), set BASE_PATH (it feeds
+# both the Vite asset base and the nginx location prefix — one value, they
+# can't drift):
+#
+#   BASE_PATH=/linkml-editor/ \
+#     docker compose -f deploy/web/docker-compose.yml up --build
+#
+# GIT_CORS_PROXY defaults to the same-origin /cors-proxy path served by the
+# nginx reverse proxy below. Override with an absolute URL if the proxy runs
+# elsewhere. GITHUB_CLIENT_ID (optional) enables the GitHub sign-in UI.
 
 services:
   web:
@@ -27,8 +22,9 @@ services:
       context: ../..
       dockerfile: deploy/web/Dockerfile.web
       args:
-        # Must match the VITE_BASE_URL used when building the web package.
         BASE_PATH: ${BASE_PATH:-/}
+        GIT_CORS_PROXY: ${GIT_CORS_PROXY:-${BASE_PATH:-/}cors-proxy}
+        GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
     ports:
       - "80:80"
     depends_on:
